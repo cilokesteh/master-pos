@@ -25,12 +25,12 @@ const CONFIG = {
     // Buat project baru di https://console.firebase.google.com
     // Copy config dari Project Settings → Web App
     firebase: {
-        apiKey:            "AIzaSyDdqI387TVTuWvmMROwZKuGMv_0zQi5G7w",
-        authDomain:        "pos-master-2d26b.firebaseapp.com",
-        projectId:         "pos-master-2d26b",
-        storageBucket:     "pos-master-2d26b.firebasestorage.app",
-        messagingSenderId: "877331255278",
-        appId:             "1:877331255278:web:f83923e3dca10d0e8ac8ff"
+        apiKey:            "AIzaSyAnnCmMT3vV-7Qx9HR3ww1sZ7h_MVh6geo",
+        authDomain:        "pos-warung-salem.firebaseapp.com",
+        projectId:         "pos-warung-salem",
+        storageBucket:     "pos-warung-salem.firebasestorage.app",
+        messagingSenderId: "85046866660",
+        appId:             "1:85046866660:web:39960723ef60b288db72f1"
     },
 
     // ─── Receipt Settings ───
@@ -43,7 +43,7 @@ const CONFIG = {
     // Buat user admin di Firebase Console → Authentication → Users
     // Email & password ini cuma untuk preview, buat asli di Firebase Console
     adminHint: {
-        email: "admin@namatoko.com",
+        email: "admin@warungsalem.com",
         password: "00000000"
     }
 };

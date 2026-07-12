@@ -306,7 +306,7 @@
             const { start, end } = getDateRange();
 
             try {
-                const snap = await db.collection('transactions')
+                const snap = await db.collection('demo-transactions')
                     .where('createdAt', '>=', start.getTime())
                     .where('createdAt', '<', end.getTime())
                     .orderBy('createdAt', 'desc')
@@ -377,7 +377,7 @@
 
             try {
                 // Get all transactions
-                const snap = await db.collection('transactions').orderBy('createdAt', 'desc').limit(500).get();
+                const snap = await db.collection('demo-transactions').orderBy('createdAt', 'desc').limit(500).get();
 
                 const itemMap = {};
                 snap.docs.forEach(doc => {
@@ -453,7 +453,7 @@
             content.classList.add('hidden');
 
             try {
-                const snap = await db.collection('transactions')
+                const snap = await db.collection('demo-transactions')
                     .orderBy('createdAt', 'desc')
                     .limit(100)
                     .get();
@@ -507,7 +507,7 @@
         // ─── Reprint Receipt ───
         async function reprintReceipt(docId) {
             try {
-                const doc = await db.collection('transactions').doc(docId).get();
+                const doc = await db.collection('demo-transactions').doc(docId).get();
                 if (!doc.exists) { alert('Transaksi tidak ditemukan'); return; }
 
                 const d = doc.data();

@@ -314,7 +314,7 @@
 
         // Load products from Firestore
         function loadProducts() {
-            db.collection('products').onSnapshot(snapshot => {
+            db.collection('demo-products').onSnapshot(snapshot => {
                 products = [];
                 snapshot.forEach(doc => {
                     products.push({ id: doc.id, ...doc.data() });
@@ -493,9 +493,9 @@
             const data = { name, price, stock, category };
 
             if (editingProductId) {
-                db.collection('products').doc(editingProductId).update(data);
+                db.collection('demo-products').doc(editingProductId).update(data);
             } else {
-                db.collection('products').add(data);
+                db.collection('demo-products').add(data);
             }
             hideProductModal();
         }
@@ -505,7 +505,7 @@
             const name = product ? product.name : 'produk ini';
             if (!confirm(`Hapus produk "${name}"?\nTindakan ini tidak dapat dibatalkan.`)) return;
             try {
-                await db.collection('products').doc(id).delete();
+                await db.collection('demo-products').doc(id).delete();
             } catch (err) {
                 alert('Gagal menghapus produk: ' + err.message);
             }
@@ -614,7 +614,7 @@
                 const yearStart = new Date(new Date().getFullYear(), 0, 1);
                 const yearEnd = new Date(new Date().getFullYear() + 1, 0, 1);
                 
-                const yearSnap = await db.collection('transactions')
+                const yearSnap = await db.collection('demo-transactions')
                     .where('createdAt', '>=', yearStart.getTime())
                     .where('createdAt', '<', yearEnd.getTime())
                     .get();
@@ -644,15 +644,15 @@
                     createdBy: currentUser.email
                 };
 
-                await db.collection('transactions').add(transaction);
+                await db.collection('demo-transactions').add(transaction);
 
                 // Save / update customer in customer database
                 const waInput = document.getElementById('customer-wa').value.trim();
                 const nameInput = document.getElementById('customer-name').value.trim();
                 if (waInput) {
-                    const custSnap = await db.collection('customers').where('wa', '==', waInput).limit(1).get();
+                    const custSnap = await db.collection('demo-customers').where('wa', '==', waInput).limit(1).get();
                     if (custSnap.empty) {
-                        await db.collection('customers').add({ name: nameInput || 'Walk-in', wa: waInput, totalSpent: total, visitCount: 1, createdAt: Date.now() });
+                        await db.collection('demo-customers').add({ name: nameInput || 'Walk-in', wa: waInput, totalSpent: total, visitCount: 1, createdAt: Date.now() });
                     } else {
                         const custDoc = custSnap.docs[0];
                         await custDoc.ref.update({ name: nameInput || custDoc.data().name, totalSpent: firebase.firestore.FieldValue.increment(total), visitCount: firebase.firestore.FieldValue.increment(1), lastVisit: Date.now() });
@@ -661,7 +661,7 @@
 
                 // Update stock
                 for (const item of cart) {
-                    await db.collection('products').doc(item.id).update({
+                    await db.collection('demo-products').doc(item.id).update({
                         stock: firebase.firestore.FieldValue.increment(-item.qty)
                     });
                 }
@@ -887,7 +887,7 @@
             tomorrow.setDate(tomorrow.getDate() + 1);
 
             try {
-                const snapshot = await db.collection('transactions')
+                const snapshot = await db.collection('demo-transactions')
                     .where('timestamp', '>=', today)
                     .where('timestamp', '<', tomorrow)
                     .get();
