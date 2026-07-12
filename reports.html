@@ -681,7 +681,7 @@
                 return;
             }
 
-            const printWin = window.open('', '_blank', 'width=400,height=600');
+            const printWin = window.open('', '_blank', 'width=420,height=700');
             if (!printWin || printWin.closed || typeof printWin.closed == 'undefined') {
                 alert('Pop-up diblokir. Izinkan pop-up untuk situs ini agar fitur Print berfungsi.');
                 return;
@@ -695,17 +695,23 @@
                         @page { margin: 0; size: ${w}mm auto; }
                         body { margin: 0; padding: 8px; font-family: 'Courier New', monospace; color: #000; }
                         * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                        .no-print { margin-top: 12px; text-align: center; }
+                        .no-print button { padding: 8px 18px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
+                        .no-print .btn-print { background: #10b981; color: white; }
+                        .no-print .btn-close { background: #e5e7eb; color: #111; margin-left: 8px; }
                     </style>
                 </head>
-                <body>${element.innerHTML}</body>
+                <body>
+                    <div id="receipt-area">${element.innerHTML}</div>
+                    <div class="no-print">
+                        <button class="btn-print" onclick="window.print()">Print</button>
+                        <button class="btn-close" onclick="window.close()">Tutup</button>
+                    </div>
+                </body>
                 </html>
             `);
             printWin.document.close();
             printWin.focus();
-            setTimeout(() => {
-                try { printWin.print(); } catch (e) {}
-                try { printWin.close(); } catch (e) {}
-            }, 500);
         }
 
         function downloadReReceipt() {
