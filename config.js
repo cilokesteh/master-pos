@@ -43,8 +43,8 @@ const CONFIG = {
     // Buat user admin di Firebase Console → Authentication → Users
     // Email & password ini cuma untuk preview, buat asli di Firebase Console
     adminHint: {
-        email: "admin@warungsalem.com",
-        password: "00000000"
+        email: "admin@tokodemo.com",
+        password: "demo1234"
     }
 };
 
