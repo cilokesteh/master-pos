@@ -622,19 +622,22 @@
             
             if (selectedPaymentMethod === 'cash') {
                 const cash = parseInt(document.getElementById('cash-amount').value) || 0;
-                if (cash < total) {
-                    const kurang = total - cash;
-                    alert(`⚠️ Uang kurang!\n\nTotal: Rp ${total.toLocaleString('id-ID')}\nBayar: Rp ${cash.toLocaleString('id-ID')}\nKurang: Rp ${kurang.toLocaleString('id-ID')}\n\nSilakan tambah nominal.`);
+                if (cash !== total) {
+                    const diff = cash - total;
+                    alert(`⚠️ Nominal cash tidak sesuai!\n\nTotal: Rp ${total.toLocaleString('id-ID')}\nBayar: Rp ${cash.toLocaleString('id-ID')}\n${diff > 0 ? 'Kelebihan' : 'Kekurangan'}: Rp ${Math.abs(diff).toLocaleString('id-ID')}\n\nSilakan masukkan nominal yang tepat.`);
                     return;
                 }
             } else if (selectedPaymentMethod === 'split') {
                 updateSplitTotals();
                 const splitTotal = splitData.cash + splitData.qris + splitData.transfer;
-                if (splitTotal < total) {
-                    const kurang = total - splitTotal;
-                    alert(`⚠️ Total split pembayaran kurang!\n\nTotal: Rp ${total.toLocaleString('id-ID')}\nBayar: Rp ${splitTotal.toLocaleString('id-ID')}\nKurang: Rp ${kurang.toLocaleString('id-ID')}\n\nSilakan tambah nominal di salah satu metode.`);
+                if (splitTotal !== total) {
+                    const diff = splitTotal - total;
+                    alert(`⚠️ Total split pembayaran tidak sesuai!\n\nTotal: Rp ${total.toLocaleString('id-ID')}\nBayar: Rp ${splitTotal.toLocaleString('id-ID')}\n${diff > 0 ? 'Kelebihan' : 'Kekurangan'}: Rp ${Math.abs(diff).toLocaleString('id-ID')}\n\nSilakan sesuaikan nominal di salah satu metode.`);
                     return;
                 }
+            } else if (selectedPaymentMethod === 'qris' || selectedPaymentMethod === 'transfer') {
+                alert(`⚠️ Nominal pembayaran harus sesuai dengan total.\n\nTotal: Rp ${total.toLocaleString('id-ID')}\n\nPastikan customer mentransfer exact amount.`);
+                return;
             }
 
             // Show confirm modal
@@ -676,6 +679,10 @@
             if (selectedPaymentMethod === 'cash') {
                 cash = parseInt(document.getElementById('cash-amount').value) || 0;
                 change = cash - total;
+            } else if (selectedPaymentMethod === 'split') {
+                updateSplitTotals();
+                cash = splitData.cash || 0;
+                change = 0;
             }
 
             try {
