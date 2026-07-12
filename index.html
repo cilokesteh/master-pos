@@ -19,7 +19,7 @@
                         <i class="fa-solid fa-store text-white text-xl"></i>
                     </div>
                     <div>
-                        <h1 class="font-bold text-2xl" id="store-name">Store</h1>
+                        <h1 class="font-bold text-2xl" id="store-name-header">Toko Demo</h1>
                         <p class="text-xs text-zinc-500">Point of Sale</p>
                     </div>
                 </div>
@@ -180,7 +180,6 @@
                     <input type="text" id="kasir-name" readonly class="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-3 py-2 mt-1 text-sm text-zinc-400">
                 </div>
             </div>
-
             <div class="mb-4">
                 <label class="text-sm text-zinc-400">No. WhatsApp Customer (opsional)</label>
                 <input type="tel" id="customer-wa" placeholder="08xx-xxxx-xxxx" class="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-3 py-2 mt-1 text-sm" onkeydown="if(event.key==='Enter')document.getElementById('cash-amount').focus()">
@@ -232,13 +231,13 @@
 
     <!-- Receipt Modal -->
     <div id="receipt-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-        <div id="receipt-content" class="bg-white text-black mx-4 font-mono text-[13px] leading-tight" style="max-width:320px;padding:8px;">
+        <div id="receipt-content" class="bg-white text-black mx-4 font-mono text-[13px] leading-tight" style="width:${CONFIG.receipt.width}mm;max-width:320px;padding:8px;">
             <!-- Receipt content injected by JS -->
         </div>
         <div class="absolute bottom-8 flex gap-3">
-            <button id="send-wa-btn" onclick="sendReceiptToWA()" class="hidden px-4 py-2 bg-green-500 text-white rounded-2xl text-sm"><i class="fa-brands fa-whatsapp mr-1"></i>Kirim WA</button>
             <button onclick="printReceipt()" class="px-4 py-2 bg-emerald-600 text-white rounded-2xl text-sm"><i class="fa-solid fa-print mr-1"></i>Print</button>
             <button onclick="downloadPdf()" class="px-4 py-2 bg-zinc-700 text-white rounded-2xl text-sm"><i class="fa-solid fa-download mr-1"></i>PDF</button>
+            <button id="send-wa-btn" onclick="sendReceiptToWA()" class="hidden px-4 py-2 bg-green-500 text-white rounded-2xl text-sm"><i class="fa-brands fa-whatsapp mr-1"></i>Kirim WA</button>
             <button onclick="hideReceiptModal()" class="px-4 py-2 bg-zinc-800 text-white rounded-2xl text-sm">Tutup</button>
         </div>
     </div>
@@ -248,41 +247,14 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     
     <script>
-        // Apply theme color & store name from CONFIG
-        (function() {
-            const theme = THEMES[CONFIG.theme] || THEMES.emerald;
-            const hex = theme.hex;
-            const dark = theme.bg;
-            // RGB triplet for opacity variants (e.g. bg-emerald-500/20)
-            const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
-            const rgb = `${r}, ${g}, ${b}`;
-
-            document.documentElement.style.setProperty('--theme-primary', hex);
-            document.documentElement.style.setProperty('--theme-bg', dark);
-
-            // Inject overrides so Tailwind emerald utilities follow CONFIG.theme
-            const css = `
-                .bg-emerald-500 { background-color: ${hex} !important; }
-                .bg-emerald-600 { background-color: ${hex} !important; }
-                .hover\\:bg-emerald-700:hover { background-color: ${dark} !important; }
-                .text-emerald-400 { color: ${hex} !important; }
-                .border-emerald-500 { border-color: ${hex} !important; }
-                .hover\\:border-emerald-500:hover { border-color: ${hex} !important; }
-                .focus\\:border-emerald-500:focus { border-color: ${hex} !important; }
-                .bg-emerald-500\\/20 { background-color: rgba(${rgb}, 0.2) !important; }
-                .bg-emerald-900\\/30 { background-color: rgba(${rgb}, 0.3) !important; }
-            `;
-            const styleEl = document.createElement('style');
-            styleEl.id = 'theme-overrides';
-            styleEl.textContent = css;
-            document.head.appendChild(styleEl);
-
-            const sn = document.getElementById('store-name');
-            if (sn) sn.textContent = CONFIG.storeName;
-            document.title = `POS — ${CONFIG.storeName}`;
-        })();
-
-        const firebaseConfig = CONFIG.firebase;
+        const firebaseConfig = {
+            apiKey: CONFIG.firebase.apiKey,
+            authDomain: CONFIG.firebase.authDomain,
+            projectId: CONFIG.firebase.projectId,
+            storageBucket: CONFIG.firebase.storageBucket,
+            messagingSenderId: CONFIG.firebase.messagingSenderId,
+            appId: CONFIG.firebase.appId
+        };
 
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
@@ -354,7 +326,7 @@
                             <i class="fa-solid fa-pen"></i>
                         </button>
                         <button onclick="event.stopPropagation(); deleteProduct('${product.id}')" 
-                                class="w-8 h-8 bg-red-600 hover:bg-red-700 rounded-lg text-xs flex items-center justify-center">
+                                class="w-8 h-8 bg-red-600/80 hover:bg-red-600 rounded-lg text-xs flex items-center justify-center">
                             <i class="fa-solid fa-trash"></i>
                         </button>
                         <button onclick="event.stopPropagation(); addToCart('${product.id}')" 
@@ -500,14 +472,14 @@
             hideProductModal();
         }
 
-        async function deleteProduct(id) {
-            const product = products.find(p => p.id === id);
-            const name = product ? product.name : 'produk ini';
-            if (!confirm(`Hapus produk "${name}"?\nTindakan ini tidak dapat dibatalkan.`)) return;
+        async function deleteProduct(productId) {
+            const product = products.find(p => p.id === productId);
+            if (!product) return;
+            if (!confirm(`Hapus "${product.name}"?\n\nProduk akan dihapus permanen dari daftar.`)) return;
             try {
-                await db.collection('products').doc(id).delete();
+                await db.collection('products').doc(productId).delete();
             } catch (err) {
-                alert('Gagal menghapus produk: ' + err.message);
+                alert('Gagal menghapus: ' + err.message);
             }
         }
 
@@ -620,6 +592,7 @@
                     .get();
                 const receiptSeq = yearSnap.size + 1;
 
+                // Use server timestamp for Firestore
                 const now = firebase.firestore.FieldValue.serverTimestamp();
                 
                 const transaction = {
@@ -646,16 +619,31 @@
 
                 await db.collection('transactions').add(transaction);
 
-                // Save / update customer in customer database
+                // Save/update customer to database
                 const waInput = document.getElementById('customer-wa').value.trim();
                 const nameInput = document.getElementById('customer-name').value.trim();
                 if (waInput) {
-                    const custSnap = await db.collection('customers').where('wa', '==', waInput).limit(1).get();
+                    // Check if customer exists by WA
+                    const custSnap = await db.collection('customers')
+                        .where('wa', '==', waInput)
+                        .limit(1)
+                        .get();
                     if (custSnap.empty) {
-                        await db.collection('customers').add({ name: nameInput || 'Walk-in', wa: waInput, totalSpent: total, visitCount: 1, createdAt: Date.now() });
+                        await db.collection('customers').add({
+                            name: nameInput || 'Walk-in',
+                            wa: waInput,
+                            totalSpent: total,
+                            visitCount: 1,
+                            createdAt: Date.now()
+                        });
                     } else {
                         const custDoc = custSnap.docs[0];
-                        await custDoc.ref.update({ name: nameInput || custDoc.data().name, totalSpent: firebase.firestore.FieldValue.increment(total), visitCount: firebase.firestore.FieldValue.increment(1), lastVisit: Date.now() });
+                        await custDoc.ref.update({
+                            name: nameInput || custDoc.data().name,
+                            totalSpent: firebase.firestore.FieldValue.increment(total),
+                            visitCount: firebase.firestore.FieldValue.increment(1),
+                            lastVisit: Date.now()
+                        });
                     }
                 }
 
@@ -678,7 +666,6 @@
         function showReceipt(transaction) {
             const modal = document.getElementById('receipt-modal');
             const content = document.getElementById('receipt-content');
-            content.style.width = `${CONFIG.receipt.width}mm`;
             const methodLabel = transaction.method === 'cash' ? 'Cash' : 
                               transaction.method === 'qris' ? 'QRIS' : 'Transfer';
             
@@ -707,7 +694,7 @@
             
             // Wrap everything in a centered container
             html += `<div style="width:100%;text-align:center;max-width:${CONFIG.receipt.width}mm;margin:0 auto;">`;
-
+            
             // Header
             html += `<div style="margin-bottom:6px;">`;
             html += `<div style="font-size:16px;font-weight:bold;letter-spacing:1px;">${CONFIG.storeName.toUpperCase()}</div>`;
@@ -773,6 +760,7 @@
             html += `<div style="font-size:11px;margin-top:4px;">Terima Kasih</div>`;
             html += `<div style="font-size:9px;color:#666;margin-top:6px;line-height:1.6;">`;
             html += `${CONFIG.storeAddress}<br>`;
+            html += `
             html += `${CONFIG.storeHours}<br>`;
             html += `WA: ${CONFIG.storeWA}<br>`;
             html += `IG: ${CONFIG.storeIG}<br>`;
@@ -786,8 +774,67 @@
             
             window._lastReceiptNo = receiptNo;
             window._lastReceiptData = transaction;
+            
+            // Show/hide WA button based on customer WA
             const waBtn = document.getElementById('send-wa-btn');
-            if (transaction.customerWA) { waBtn.classList.remove('hidden'); } else { waBtn.classList.add('hidden'); }
+            if (transaction.customerWA) {
+                waBtn.classList.remove('hidden');
+            } else {
+                waBtn.classList.add('hidden');
+            }
+        }
+
+        function sendReceiptToWA() {
+            const t = window._lastReceiptData;
+            if (!t || !t.customerWA) {
+                alert('Customer tidak punya nomor WhatsApp');
+                return;
+            }
+            
+            // Convert WA number to international format (62xxx)
+            let wa = t.customerWA.replace(/[^0-9]/g, '');
+            if (wa.startsWith('0')) wa = '62' + wa.slice(1);
+            else if (!wa.startsWith('62')) wa = '62' + wa;
+            
+            const ts = new Date(t.createdAt || Date.now());
+            const dd = String(ts.getDate()).padStart(2, '0');
+            const MM = String(ts.getMonth() + 1).padStart(2, '0');
+            const yy = String(ts.getFullYear()).slice(-2);
+            const seq = String(t.receiptSeq || 1).padStart(6, '0');
+            const receiptNo = `POS-${dd}${MM}${yy}-${seq}`;
+            const timeStr = ts.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+            const dateStr = `${dd}/${MM}/${yy}`;
+            const methodLabel = t.method === 'cash' ? 'Cash' : t.method === 'qris' ? 'QRIS' : 'Transfer';
+            
+            let msg = `*${CONFIG.storeName.toUpperCase()}*\n"${CONFIG.storeJargon}"\n\n`;
+            msg += `${dateStr} ${timeStr}\nNo: ${receiptNo}\n`;
+            msg += `Customer: ${t.customerName || 'Walk-in'}\n`;
+            msg += `Kasir: ${t.kasirName || 'admin'}\n`;
+            msg += `${'─'.repeat(24)}\n`;
+            (t.items || []).forEach(item => {
+                msg += `${item.name} x${item.qty}  Rp ${(item.subtotal||0).toLocaleString('id-ID')}\n`;
+                if (item.imei) {
+                    msg += `  IMEI: ${item.imei}\n`;
+                }
+            });
+            msg += `${'─'.repeat(24)}\n`;
+            msg += `*TOTAL: Rp ${(t.total||0).toLocaleString('id-ID')}*\n`;
+            msg += `Metode: ${methodLabel}\n`;
+            if (t.method === 'cash' && t.cash) {
+                msg += `Tunai: Rp ${t.cash.toLocaleString('id-ID')}\n`;
+                msg += `Kembali: Rp ${(t.change||0).toLocaleString('id-ID')}\n`;
+            }
+            msg += `${'─'.repeat(24)}\n`;
+            msg += `Terima Kasih 🙏\n`;
+            msg += `${CONFIG.storeAddress}\n`;
+            msg += ``;
+            msg += `${CONFIG.storeHours}\n`;
+            msg += `WA: ${CONFIG.storeWA}\n`;
+            msg += `IG: ${CONFIG.storeIG}\n`;
+            msg += `${CONFIG.storeWebsite}`;
+            
+            const url = `https://wa.me/${wa}?text=${encodeURIComponent(msg)}`;
+            window.open(url, '_blank');
         }
 
         function hideReceiptModal() {
@@ -797,8 +844,8 @@
         function printReceipt() {
             const element = document.getElementById('receipt-content');
             const receiptNo = window._lastReceiptNo || 'receipt';
-            const w = CONFIG.receipt.width || 80;
             
+            // Open print window with receipt content
             const printWin = window.open('', '_blank', 'width=400,height=600');
             printWin.document.write(`
                 <!DOCTYPE html>
@@ -806,7 +853,7 @@
                 <head>
                     <title>Print ${receiptNo}</title>
                     <style>
-                        @page { margin: 0; size: ${w}mm auto; }
+                        @page { margin: 0; size: 80mm auto; }
                         body { margin: 0; padding: 8px; font-family: 'Courier New', monospace; color: #000; }
                         * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                     </style>
@@ -824,58 +871,14 @@
 
         function downloadPdf() {
             const element = document.getElementById('receipt-content');
-            const w = CONFIG.receipt.width || 80;
             const opt = {
                 margin: 0,
                 filename: `${window._lastReceiptNo || 'receipt'}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { scale: 2 },
-                jsPDF: { unit: 'mm', format: [w, 200] }
+                jsPDF: { unit: 'mm', format: [CONFIG.receipt.width || 80, 200] }
             };
             html2pdf().set(opt).from(element).save();
-        }
-
-        function sendReceiptToWA() {
-            const t = window._lastReceiptData;
-            if (!t) return alert('Data struk tidak tersedia.');
-
-            // Format WA number: strip non-digits, convert 08xx → 628xx
-            let wa = (t.customerWA || '').replace(/\D/g, '');
-            if (wa.startsWith('0')) wa = '62' + wa.slice(1);
-            else if (wa.startsWith('8')) wa = '62' + wa;
-            else if (!wa.startsWith('62')) wa = '62' + wa;
-
-            // Build date/time
-            const ts = (t.createdAt && typeof t.createdAt === 'number') ? new Date(t.createdAt) :
-                       (t.timestamp && t.timestamp?.toDate) ? new Date(t.timestamp.toDate()) : new Date();
-            const dd = String(ts.getDate()).padStart(2, '0');
-            const MM = String(ts.getMonth() + 1).padStart(2, '0');
-            const yy = String(ts.getFullYear()).slice(-2);
-            const timeStr = ts.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-            const dateStr = `${dd}/${MM}/${yy}`;
-            const seq = String(t.receiptSeq || 1).padStart(6, '0');
-            const receiptNo = `POS-${dd}${MM}${yy}-${seq}`;
-            const methodLabel = t.method === 'cash' ? 'Cash' : t.method === 'qris' ? 'QRIS' : 'Transfer';
-
-            // Build item lines
-            let itemLines = '';
-            t.items.forEach(item => {
-                itemLines += `${item.name} x${item.qty} = Rp${item.subtotal.toLocaleString('id-ID')}\n`;
-                if (item.imei) {
-                    itemLines += `  IMEI: ${item.imei}\n`;
-                }
-            });
-
-            // Cash detail
-            let cashLines = '';
-            if (t.method === 'cash') {
-                cashLines = `Tunai: Rp${t.cash.toLocaleString('id-ID')}\nKembali: Rp${t.change.toLocaleString('id-ID')}\n`;
-            }
-
-            const msg = `*${CONFIG.storeName.toUpperCase()}*\n_"${CONFIG.storeJargon}"_\n\n${dateStr} ${timeStr}\nNo: ${receiptNo}\n${'─'.repeat(20)}\nCustomer: ${t.customerName || 'Walk-in'}\nKasir: ${t.kasirName || t.createdBy || 'admin'}\n${'─'.repeat(20)}\n${itemLines}${'─'.repeat(20)}\n*TOTAL: Rp${t.total.toLocaleString('id-ID')}*\nMetode: ${methodLabel}\n${cashLines}${'─'.repeat(20)}\nTerima Kasih 🙏\n\n${CONFIG.storeAddress}\n${CONFIG.storeHours}\nWA: ${CONFIG.storeWA}\nIG: ${CONFIG.storeIG}\n${CONFIG.storeWebsite}`;
-
-            const url = `https://wa.me/${wa}?text=${encodeURIComponent(msg)}`;
-            window.open(url, '_blank');
         }
 
         async function loadTodayStats() {
