@@ -18,8 +18,8 @@ const CONFIG = {
     storeWebsite: "tokodemo.com",
 
     // ─── Theme ───
-    // Warna utama: 'emerald', 'blue', 'purple', 'orange', 'rose', 'cyan', 'amber'
-    theme: 'emerald',
+    // Warna utama: 'emerald', 'blue', 'purple', 'orange', 'rose', 'cyan', 'amber', 'magenta'
+    theme: 'magenta',
 
     // ─── Firebase Config ───
     // Buat project baru di https://console.firebase.google.com
@@ -57,4 +57,5 @@ const THEMES = {
     rose:    { primary: 'rose',    hex: '#f43f5e', bg: '#881337' },
     cyan:    { primary: 'cyan',    hex: '#06b6d4', bg: '#0e7490' },
     amber:   { primary: 'amber',   hex: '#f59e0b', bg: '#78350f' },
+    magenta: { primary: 'magenta', hex: '#e11d8f', bg: '#831843' },
 };
