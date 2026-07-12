@@ -57,7 +57,7 @@
         document.getElementById('login-btn').style.backgroundColor = theme.hex;
 
         // Firebase init from config
-        firebase.initializeApp(CONFIG.firebase);
+        firebase.initializeApp(CONFIG['firebase']);
         const auth = firebase.auth();
 
         auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
