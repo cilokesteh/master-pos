@@ -675,8 +675,17 @@
             const element = document.getElementById('reprint-content');
             const receiptNo = window._reReceiptNo || 'receipt';
             const w = CONFIG.receipt.width || 80;
-            
+
+            if (!element || !element.innerHTML.trim()) {
+                alert('Struk belum siap untuk dicetak.');
+                return;
+            }
+
             const printWin = window.open('', '_blank', 'width=400,height=600');
+            if (!printWin || printWin.closed || typeof printWin.closed == 'undefined') {
+                alert('Pop-up diblokir. Izinkan pop-up untuk situs ini agar fitur Print berfungsi.');
+                return;
+            }
             printWin.document.write(`
                 <!DOCTYPE html>
                 <html>
@@ -694,22 +703,32 @@
             printWin.document.close();
             printWin.focus();
             setTimeout(() => {
-                printWin.print();
-                printWin.close();
+                try { printWin.print(); } catch (e) {}
+                try { printWin.close(); } catch (e) {}
             }, 500);
         }
 
         function downloadReReceipt() {
             const element = document.getElementById('reprint-content');
             const w = CONFIG.receipt.width || 80;
-            const opt = {
-                margin: 0,
-                filename: `REPRINT-${window._reReceiptNo || 'receipt'}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2 },
-                jsPDF: { unit: 'mm', format: [w, 200] }
-            };
-            html2pdf().set(opt).from(element).save();
+
+            if (!element || !element.innerHTML.trim()) {
+                alert('Struk belum siap untuk diunduh.');
+                return;
+            }
+
+            try {
+                const opt = {
+                    margin: 0,
+                    filename: `REPRINT-${window._reReceiptNo || 'receipt'}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true },
+                    jsPDF: { unit: 'mm', format: [w, 200] }
+                };
+                html2pdf().set(opt).from(element).save();
+            } catch (e) {
+                alert('Gagal generate PDF: ' + e.message + '\n\nCoba gunakan tombol Print lalu Save as PDF dari browser.');
+            }
         }
     </script>
 </body>
