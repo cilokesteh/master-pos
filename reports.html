@@ -45,10 +45,15 @@
             <!-- Daily / Weekly / Monthly / Yearly Summary -->
             <div id="summary-section" class="space-y-4">
                 <!-- Date picker -->
-                <div class="flex items-center gap-3 mb-4 flex-wrap">
+                <div class="flex items-center justify-between mb-4 flex-wrap">
                     <input type="date" id="date-picker" class="bg-zinc-900 border border-zinc-700 rounded-2xl px-4 py-2 text-sm text-zinc-200" onchange="loadReport()">
-                    <button onclick="prevPeriod()" class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm"><i class="fa-solid fa-chevron-left"></i></button>
-                    <button onclick="nextPeriod()" class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm"><i class="fa-solid fa-chevron-right"></i></button>
+                    <div class="flex gap-2">
+                        <button onclick="exportCurrentReportExcel()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-2xl text-sm text-white">
+                            <i class="fa-solid fa-file-excel mr-1"></i> Download Excel
+                        </button>
+                        <button onclick="prevPeriod()" class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm"><i class="fa-solid fa-chevron-left"></i></button>
+                        <button onclick="nextPeriod()" class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm"><i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
                     <span id="period-label" class="text-zinc-400 text-sm ml-2"></span>
                 </div>
 
@@ -75,7 +80,7 @@
                 <!-- Breakdown by payment method -->
                 <div class="bg-zinc-900 rounded-2xl p-5 border border-zinc-800">
                     <h3 class="font-semibold mb-3">Pendapatan per Metode Pembayaran</h3>
-                    <div id="sum-methods" class="grid grid-cols-3 gap-4">
+                    <div id="sum-methods" class="grid grid-cols-4 gap-4">
                         <div class="text-center">
                             <div class="text-zinc-400 text-xs">Cash</div>
                             <div class="font-bold text-lg" id="sum-cash">Rp 0</div>
@@ -87,6 +92,10 @@
                         <div class="text-center">
                             <div class="text-zinc-400 text-xs">Transfer</div>
                             <div class="font-bold text-lg" id="sum-transfer">Rp 0</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-zinc-400 text-xs">Split</div>
+                            <div class="font-bold text-lg" id="sum-split">Rp 0</div>
                         </div>
                     </div>
                 </div>
@@ -315,7 +324,7 @@
                 // ---- Summary ----
                 let totalRevenue = 0;
                 let totalItems = 0;
-                let cashRev = 0, qrisRev = 0, transferRev = 0;
+                let cashRev = 0, qrisRev = 0, transferRev = 0, splitRev = 0;
 
                 snap.docs.forEach(doc => {
                     const d = doc.data();
@@ -324,6 +333,9 @@
                     if (d.method === 'cash') cashRev += d.total || 0;
                     else if (d.method === 'qris') qrisRev += d.total || 0;
                     else if (d.method === 'transfer') transferRev += d.total || 0;
+                    else if (d.method === 'split' && d.split) {
+                        splitRev += d.total || 0;
+                    }
                 });
 
                 document.getElementById('sum-count').textContent = snap.size;
@@ -333,6 +345,12 @@
                 document.getElementById('sum-cash').textContent = `Rp ${cashRev.toLocaleString('id-ID')}`;
                 document.getElementById('sum-qris').textContent = `Rp ${qrisRev.toLocaleString('id-ID')}`;
                 document.getElementById('sum-transfer').textContent = `Rp ${transferRev.toLocaleString('id-ID')}`;
+                document.getElementById('sum-split').textContent = `Rp ${splitRev.toLocaleString('id-ID')}`;
+
+                // Store for current report export
+                window._currentReportData = snap.docs.map(doc => doc.data());
+                window._currentReportPeriod = formatPeriodLabel();
+                window._currentReportTab = currentTab;
 
                 // ---- Transaction List in Period ----
                 const listEl = document.getElementById('period-transactions');
@@ -344,7 +362,7 @@
                         const d = doc.data();
                         const ts = new Date(d.createdAt || 0);
                         const timeStr = ts.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-                        const methodLabel = d.method === 'cash' ? 'Cash' : d.method === 'qris' ? 'QRIS' : 'Transfer';
+                        const methodLabel = d.method === 'cash' ? 'Cash' : d.method === 'qris' ? 'QRIS' : d.method === 'split' ? 'Split' : 'Transfer';
                         const div = document.createElement('div');
                         div.className = 'flex items-center justify-between bg-zinc-800/50 rounded-xl px-3 py-2';
                         div.innerHTML = `
@@ -445,6 +463,40 @@
             XLSX.writeFile(wb, `Laporan_Terlaris_${date}.xlsx`);
         }
 
+        function exportCurrentReportExcel() {
+            if (!window._currentReportData || window._currentReportData.length === 0) {
+                alert('Belum ada transaksi di periode ini');
+                return;
+            }
+
+            const tab = window._currentReportTab || 'daily';
+            const period = window._currentReportPeriod || '';
+            const rows = [['No', 'Tanggal', 'Waktu', 'No Struk', 'Customer', 'Metode', 'Total', 'Items']];
+            window._currentReportData.forEach((d, i) => {
+                const ts = new Date(d.createdAt || 0);
+                const dateStr = ts.toLocaleDateString('id-ID');
+                const timeStr = ts.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                const methodLabel = d.method === 'cash' ? 'Cash' : d.method === 'qris' ? 'QRIS' : d.method === 'split' ? 'Split' : 'Transfer';
+                const dd = String(ts.getDate()).padStart(2, '0');
+                const MM = String(ts.getMonth() + 1).padStart(2, '0');
+                const yy = String(ts.getFullYear()).slice(-2);
+                const seq = String(d.receiptSeq || 0).padStart(6, '0');
+                const receiptNo = `POS-${dd}${MM}${yy}-${seq}`;
+                const itemStr = (d.items || []).map(item => `${item.name} x${item.qty}`).join('; ');
+                rows.push([i + 1, dateStr, timeStr, receiptNo, d.customerName || 'Walk-in', methodLabel, d.total || 0, itemStr]);
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(rows);
+            ws['!cols'] = [{ wch: 6 }, { wch: 14 }, { wch: 10 }, { wch: 20 }, { wch: 18 }, { wch: 10 }, { wch: 14 }, { wch: 50 }];
+
+            const wb = XLSX.utils.book_new();
+            const sheetName = `Laporan ${tab.charAt(0).toUpperCase() + tab.slice(1)} ${period}`.replace(/[\/\\:*?]/g, '-');
+            XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+            const date = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(wb, `Laporan_${tab}_${date}.xlsx`);
+        }
+
         // ─── History ───
         async function loadHistory() {
             const loading = document.getElementById('loading');
@@ -468,7 +520,7 @@
                         const ts = new Date(d.createdAt || 0);
                         const dateStr = ts.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
                         const timeStr = ts.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-                        const methodLabel = d.method === 'cash' ? 'Cash' : d.method === 'qris' ? 'QRIS' : 'Transfer';
+                        const methodLabel = d.method === 'cash' ? 'Cash' : d.method === 'qris' ? 'QRIS' : d.method === 'split' ? 'Split' : 'Transfer';
                         const dd = String(ts.getDate()).padStart(2, '0');
                         const MM = String(ts.getMonth() + 1).padStart(2, '0');
                         const yy = String(ts.getFullYear()).slice(-2);
@@ -521,7 +573,7 @@
                 const receiptNo = `POS-${dd}${MM}${yy}-${seq}`;
                 const timeStr = ts.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
                 const dateStr = `${dd}/${MM}/${yy}`;
-                const methodLabel = d.method === 'cash' ? 'Cash' : d.method === 'qris' ? 'QRIS' : 'Transfer';
+                const methodLabel = d.method === 'cash' ? 'Cash' : d.method === 'qris' ? 'QRIS' : d.method === 'split' ? 'Split' : 'Transfer';
 
                 let html = '';
                 html += `<div style="width:100%;text-align:center;max-width:${CONFIG.receipt.width}mm;margin:0 auto;">`;
@@ -578,6 +630,22 @@
                     html += `<span>Kembali</span>`;
                     html += `<span>${(d.change || 0).toLocaleString('id-ID')}</span>`;
                     html += `</div>`;
+                } else if (d.method === 'split' && d.split) {
+                    if (d.split.cash > 0) {
+                        html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>Cash</span><span>${d.split.cash.toLocaleString('id-ID')}</span></div>`;
+                    }
+                    if (d.split.qris > 0) {
+                        html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>QRIS</span><span>${d.split.qris.toLocaleString('id-ID')}</span></div>`;
+                    }
+                    if (d.split.transfer > 0) {
+                        html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>Transfer</span><span>${d.split.transfer.toLocaleString('id-ID')}</span></div>`;
+                    }
+                    if (d.split.cardType) {
+                        html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>Kartu</span><span>${d.split.cardType.toUpperCase()}</span></div>`;
+                    }
+                    if (d.split.cardNumber) {
+                        html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>No Kartu</span><span>${d.split.cardNumber}</span></div>`;
+                    }
                 }
                 // Footer
                 html += `<div style="border-top:1px dashed #000;margin:8px 0;"></div>`;

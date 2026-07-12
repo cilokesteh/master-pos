@@ -188,21 +188,54 @@
 
             <div class="mb-4">
                 <label class="text-sm text-zinc-400">Metode Pembayaran</label>
-                <div class="grid grid-cols-3 gap-2 mt-2">
+                <div class="grid grid-cols-4 gap-2 mt-2">
                     <button onclick="selectPaymentMethod('cash')" id="method-cash" class="py-2 rounded-xl border border-zinc-700 bg-zinc-800 hover:border-emerald-500 text-sm">Cash</button>
                     <button onclick="selectPaymentMethod('qris')" id="method-qris" class="py-2 rounded-xl border border-zinc-700 bg-zinc-800 hover:border-emerald-500 text-sm">QRIS</button>
                     <button onclick="selectPaymentMethod('transfer')" id="method-transfer" class="py-2 rounded-xl border border-zinc-700 bg-zinc-800 hover:border-emerald-500 text-sm">Transfer</button>
+                    <button onclick="selectPaymentMethod('split')" id="method-split" class="py-2 rounded-xl border border-zinc-700 bg-zinc-800 hover:border-emerald-500 text-sm">Split</button>
                 </div>
             </div>
 
             <div id="cash-section">
                 <label class="text-sm text-zinc-400">Uang Tunai</label>
                 <input type="number" id="cash-amount" class="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 mt-1 text-2xl text-center" oninput="calculateChange()">
-                
-                <div class="flex justify-between mt-4 text-lg">
-                    <span class="text-zinc-400">Kembalian</span>
-                    <span id="change-amount" class="font-bold text-emerald-400">Rp 0</span>
+            </div>
+
+            <div id="split-section" class="hidden space-y-3 mt-4">
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <label class="text-sm text-zinc-400">Cash (Rp)</label>
+                        <input type="number" id="split-cash" class="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-3 py-2 mt-1 text-sm" oninput="updateSplitTotals()">
+                    </div>
+                    <div>
+                        <label class="text-sm text-zinc-400">QRIS (Rp)</label>
+                        <input type="number" id="split-qris" class="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-3 py-2 mt-1 text-sm" oninput="updateSplitTotals()">
+                    </div>
+                    <div>
+                        <label class="text-sm text-zinc-400">Transfer (Rp)</label>
+                        <input type="number" id="split-transfer" class="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-3 py-2 mt-1 text-sm" oninput="updateSplitTotals()">
+                    </div>
                 </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-sm text-zinc-400">Jenis Kartu</label>
+                        <select id="card-type" class="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-3 py-2 mt-1 text-sm">
+                            <option value="">-- Pilih --</option>
+                            <option value="debit">Debit</option>
+                            <option value="kredit">Kredit</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-sm text-zinc-400">No Kartu</label>
+                        <input type="text" id="card-number" placeholder="xxxx-xxxx-xxxx-xxxx" class="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-3 py-2 mt-1 text-sm">
+                    </div>
+                </div>
+                <div id="split-total" class="text-right text-sm text-zinc-400">Sisa: <span id="split-remaining">Rp 0</span></div>
+            </div>
+
+            <div class="flex justify-between mt-4 text-lg">
+                <span class="text-zinc-400">Kembalian</span>
+                <span id="change-amount" class="font-bold text-emerald-400">Rp 0</span>
             </div>
 
             <div class="flex gap-3 mt-6">
@@ -294,6 +327,7 @@
         let currentFilter = 'all';
         let editingProductId = null;
         let selectedPaymentMethod = 'cash';
+        let splitData = { cash: 0, qris: 0, transfer: 0, cardType: '', cardNumber: '' };
         let todayStats = { transactions: 0, revenue: 0 };
 
         // Auth check
@@ -520,11 +554,31 @@
             active.classList.add('border-emerald-500', 'bg-emerald-900/30');
 
             const cashSection = document.getElementById('cash-section');
-            if (method === 'cash') {
-                cashSection.classList.remove('hidden');
-            } else {
+            const splitSection = document.getElementById('split-section');
+
+            if (method === 'split') {
                 cashSection.classList.add('hidden');
+                splitSection.classList.remove('hidden');
+                updateSplitTotals();
+            } else {
+                cashSection.classList.toggle('hidden', method !== 'cash');
+                splitSection.classList.add('hidden');
             }
+        }
+
+        function updateSplitTotals() {
+            const total = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+            const cash = parseInt(document.getElementById('split-cash').value) || 0;
+            const qris = parseInt(document.getElementById('split-qris').value) || 0;
+            const transfer = parseInt(document.getElementById('split-transfer').value) || 0;
+            const remaining = Math.max(0, total - cash - qris - transfer);
+            document.getElementById('split-remaining').textContent = `Rp ${remaining.toLocaleString('id-ID')}`;
+
+            splitData.cash = cash;
+            splitData.qris = qris;
+            splitData.transfer = transfer;
+            splitData.cardType = document.getElementById('card-type').value;
+            splitData.cardNumber = document.getElementById('card-number').value.replace(/\D/g, '');
         }
 
         function showPaymentModal() {
@@ -573,13 +627,28 @@
                     alert(`⚠️ Uang kurang!\n\nTotal: Rp ${total.toLocaleString('id-ID')}\nBayar: Rp ${cash.toLocaleString('id-ID')}\nKurang: Rp ${kurang.toLocaleString('id-ID')}\n\nSilakan tambah nominal.`);
                     return;
                 }
+            } else if (selectedPaymentMethod === 'split') {
+                updateSplitTotals();
+                const splitTotal = splitData.cash + splitData.qris + splitData.transfer;
+                if (splitTotal < total) {
+                    const kurang = total - splitTotal;
+                    alert(`⚠️ Total split pembayaran kurang!\n\nTotal: Rp ${total.toLocaleString('id-ID')}\nBayar: Rp ${splitTotal.toLocaleString('id-ID')}\nKurang: Rp ${kurang.toLocaleString('id-ID')}\n\nSilakan tambah nominal di salah satu metode.`);
+                    return;
+                }
             }
 
             // Show confirm modal
             document.getElementById('confirm-total').textContent = `Rp ${total.toLocaleString('id-ID')}`;
-            document.getElementById('confirm-method').textContent = 
-                selectedPaymentMethod === 'cash' ? 'Cash' : 
-                selectedPaymentMethod === 'qris' ? 'QRIS' : 'Transfer';
+            const methodEl = document.getElementById('confirm-method');
+            if (selectedPaymentMethod === 'split') {
+                const breakdown = [];
+                if (splitData.cash > 0) breakdown.push(`Cash: Rp ${splitData.cash.toLocaleString('id-ID')}`);
+                if (splitData.qris > 0) breakdown.push(`QRIS: Rp ${splitData.qris.toLocaleString('id-ID')}`);
+                if (splitData.transfer > 0) breakdown.push(`Transfer: Rp ${splitData.transfer.toLocaleString('id-ID')}`);
+                methodEl.textContent = `Split - ${breakdown.join(' + ')}`;
+            } else {
+                methodEl.textContent = selectedPaymentMethod === 'cash' ? 'Cash' : selectedPaymentMethod === 'qris' ? 'QRIS' : 'Transfer';
+            }
             
             const changeText = document.getElementById('confirm-change-text');
             if (selectedPaymentMethod === 'cash') {
@@ -632,9 +701,16 @@
                         category: item.category || ''
                     })),
                     total,
-                    cash,
-                    change,
+                    cash: selectedPaymentMethod === 'cash' ? (parseInt(document.getElementById('cash-amount').value) || 0) : (splitData.cash || 0),
+                    change: selectedPaymentMethod === 'cash' ? ((parseInt(document.getElementById('cash-amount').value) || 0) - total) : 0,
                     method: selectedPaymentMethod,
+                    split: selectedPaymentMethod === 'split' ? {
+                        cash: splitData.cash || 0,
+                        qris: splitData.qris || 0,
+                        transfer: splitData.transfer || 0,
+                        cardType: splitData.cardType || '',
+                        cardNumber: splitData.cardNumber || ''
+                    } : null,
                     customerName: document.getElementById('customer-name').value || 'Walk-in',
                     customerWA: document.getElementById('customer-wa').value || '',
                     kasirName: document.getElementById('kasir-name').value || currentUser?.email || 'admin',
@@ -680,7 +756,8 @@
             const content = document.getElementById('receipt-content');
             content.style.width = `${CONFIG.receipt.width}mm`;
             const methodLabel = transaction.method === 'cash' ? 'Cash' : 
-                              transaction.method === 'qris' ? 'QRIS' : 'Transfer';
+                              transaction.method === 'qris' ? 'QRIS' : 
+                              transaction.method === 'split' ? 'Split' : 'Transfer';
             
             // Generate receipt number: POS-DDMMYY-0000001
             let ts;
@@ -766,6 +843,22 @@
                 html += `<span>Kembali</span>`;
                 html += `<span>${transaction.change.toLocaleString('id-ID')}</span>`;
                 html += `</div>`;
+            } else if (transaction.method === 'split' && transaction.split) {
+                if (transaction.split.cash > 0) {
+                    html += `<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:2px;"><span>Cash</span><span>${transaction.split.cash.toLocaleString('id-ID')}</span></div>`;
+                }
+                if (transaction.split.qris > 0) {
+                    html += `<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:1px;"><span>QRIS</span><span>${transaction.split.qris.toLocaleString('id-ID')}</span></div>`;
+                }
+                if (transaction.split.transfer > 0) {
+                    html += `<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:1px;"><span>Transfer</span><span>${transaction.split.transfer.toLocaleString('id-ID')}</span></div>`;
+                }
+                if (transaction.split.cardType) {
+                    html += `<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:1px;"><span>Kartu</span><span>${transaction.split.cardType.toUpperCase()}</span></div>`;
+                }
+                if (transaction.split.cardNumber) {
+                    html += `<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:1px;"><span>No Kartu</span><span>${transaction.split.cardNumber}</span></div>`;
+                }
             }
             
             // Footer
@@ -855,7 +948,7 @@
             const dateStr = `${dd}/${MM}/${yy}`;
             const seq = String(t.receiptSeq || 1).padStart(6, '0');
             const receiptNo = `POS-${dd}${MM}${yy}-${seq}`;
-            const methodLabel = t.method === 'cash' ? 'Cash' : t.method === 'qris' ? 'QRIS' : 'Transfer';
+            const methodLabel = t.method === 'cash' ? 'Cash' : t.method === 'qris' ? 'QRIS' : t.method === 'split' ? 'Split' : 'Transfer';
 
             // Build item lines
             let itemLines = '';
@@ -866,13 +959,22 @@
                 }
             });
 
-            // Cash detail
-            let cashLines = '';
+            // Payment detail
+            let paymentLines = '';
             if (t.method === 'cash') {
-                cashLines = `Tunai: Rp${t.cash.toLocaleString('id-ID')}\nKembali: Rp${t.change.toLocaleString('id-ID')}\n`;
+                paymentLines = `Metode: ${methodLabel}\nTunai: Rp${t.cash.toLocaleString('id-ID')}\nKembali: Rp${t.change.toLocaleString('id-ID')}\n`;
+            } else if (t.method === 'split' && t.split) {
+                paymentLines += `Metode: ${methodLabel}\n`;
+                if (t.split.cash > 0) paymentLines += `Cash: Rp${t.split.cash.toLocaleString('id-ID')}\n`;
+                if (t.split.qris > 0) paymentLines += `QRIS: Rp${t.split.qris.toLocaleString('id-ID')}\n`;
+                if (t.split.transfer > 0) paymentLines += `Transfer: Rp${t.split.transfer.toLocaleString('id-ID')}\n`;
+                if (t.split.cardType) paymentLines += `Kartu: ${t.split.cardType.toUpperCase()}\n`;
+                if (t.split.cardNumber) paymentLines += `No Kartu: ${t.split.cardNumber}\n`;
+            } else {
+                paymentLines = `Metode: ${methodLabel}\n`;
             }
 
-            const msg = `*${CONFIG.storeName.toUpperCase()}*\n_"${CONFIG.storeJargon}"_\n\n${dateStr} ${timeStr}\nNo: ${receiptNo}\n${'─'.repeat(20)}\nCustomer: ${t.customerName || 'Walk-in'}\nKasir: ${t.kasirName || t.createdBy || 'admin'}\n${'─'.repeat(20)}\n${itemLines}${'─'.repeat(20)}\n*TOTAL: Rp${t.total.toLocaleString('id-ID')}*\nMetode: ${methodLabel}\n${cashLines}${'─'.repeat(20)}\nTerima Kasih 🙏\n\n${CONFIG.storeAddress}\n${CONFIG.storeHours}\nWA: ${CONFIG.storeWA}\nIG: ${CONFIG.storeIG}\n${CONFIG.storeWebsite}`;
+            const msg = `*${CONFIG.storeName.toUpperCase()}*\n_"${CONFIG.storeJargon}"_\n\n${dateStr} ${timeStr}\nNo: ${receiptNo}\n${'─'.repeat(20)}\nCustomer: ${t.customerName || 'Walk-in'}\nKasir: ${t.kasirName || t.createdBy || 'admin'}\n${'─'.repeat(20)}\n${itemLines}${'─'.repeat(20)}\n*TOTAL: Rp${t.total.toLocaleString('id-ID')}*\n${paymentLines}${'─'.repeat(20)}\nTerima Kasih 🙏\n\n${CONFIG.storeAddress}\n${CONFIG.storeHours}\nWA: ${CONFIG.storeWA}\nIG: ${CONFIG.storeIG}\n${CONFIG.storeWebsite}`;
 
             const url = `https://wa.me/${wa}?text=${encodeURIComponent(msg)}`;
             window.open(url, '_blank');
