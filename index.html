@@ -609,21 +609,6 @@
                 change = cash - total;
             }
 
-            const transaction = {
-                items: cart.map(item => ({
-                    name: item.name,
-                    price: item.price,
-                    qty: item.qty,
-                    subtotal: item.price * item.qty
-                })),
-                total,
-                cash,
-                change,
-                method: selectedPaymentMethod,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                createdBy: currentUser.email
-            };
-
             try {
                 // Count this year's transactions for receipt seq (resets Jan 1)
                 const yearStart = new Date(new Date().getFullYear(), 0, 1);
@@ -635,7 +620,6 @@
                     .get();
                 const receiptSeq = yearSnap.size + 1;
 
-                // Use server timestamp for Firestore
                 const now = firebase.firestore.FieldValue.serverTimestamp();
                 
                 const transaction = {
