@@ -9,13 +9,13 @@
 const CONFIG = {
 
     // ─── Store Info ───
-    storeName:    "NAMA TOKO",                    // Tampil di header & struk
-    storeJargon:  "Jargon / slogan toko di sini",  // Tampil di struk (italic)
-    storeAddress: "Jl. Alamat Toko No. 123, Kota, Provinsi",
-    storeHours:   "Setiap Hari: 10.00 - 21.00 WIB",
+    storeName:    "Toko Demo",                    // Tampil di header & struk
+    storeJargon:  "Pelayanan Terbaik & Cepat",    // Tampil di struk (italic)
+    storeAddress: "Jl. Demo Contoh No. 123, Jakarta",
+    storeHours:   "Setiap Hari: 08.00 - 22.00 WIB",
     storeWA:      "08xx-xxxx-xxxx",
-    storeIG:      "@username_ig",
-    storeWebsite: "website-toko.com",
+    storeIG:      "@toko_demo",
+    storeWebsite: "tokodemo.com",
 
     // ─── Theme ───
     // Warna utama: 'emerald', 'blue', 'purple', 'orange', 'rose', 'cyan', 'amber'
@@ -25,12 +25,12 @@ const CONFIG = {
     // Buat project baru di https://console.firebase.google.com
     // Copy config dari Project Settings → Web App
     firebase: {
-        apiKey:            "YOUR_API_KEY",
-        authDomain:        "YOUR_PROJECT.firebaseapp.com",
-        projectId:         "YOUR_PROJECT_ID",
-        storageBucket:     "YOUR_PROJECT.appspot.com",
-        messagingSenderId: "YOUR_SENDER_ID",
-        appId:             "YOUR_APP_ID"
+        apiKey:            "AIzaSyDdqI387TVTuWvmMROwZKuGMv_0zQi5G7w",
+        authDomain:        "pos-master-2d26b.firebaseapp.com",
+        projectId:         "pos-master-2d26b",
+        storageBucket:     "pos-master-2d26b.firebasestorage.app",
+        messagingSenderId: "877331255278",
+        appId:             "1:877331255278:web:f83923e3dca10d0e8ac8ff"
     },
 
     // ─── Receipt Settings ───

@@ -56,7 +56,7 @@
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div class="bg-zinc-900 rounded-2xl p-5 border border-zinc-800">
                         <div class="text-zinc-400 text-sm">Transaksi</div>
-                        <div class="text-2xl font-bold text-emerald-400" id="sum-count">0</div>
+                        <div class="text-2xl font-bold" id="sum-count" style="color: var(--theme-primary)">0</div>
                     </div>
                     <div class="bg-zinc-900 rounded-2xl p-5 border border-zinc-800">
                         <div class="text-zinc-400 text-sm">Pendapatan</div>
@@ -139,7 +139,7 @@
     <!-- Reprint Receipt Modal -->
     <div id="reprint-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
         <div class="max-w-[320px] mx-4">
-            <div id="reprint-content" class="bg-white text-black font-mono text-[13px] leading-tight" style="width:80mm;max-width:320px;padding:8px;"></div>
+            <div id="reprint-content" class="bg-white text-black font-mono text-[13px] leading-tight" style="max-width:320px;padding:8px;"></div>
             <div class="flex gap-3 justify-center mt-6">
                 <button onclick="printReReceipt()" class="px-4 py-2 bg-emerald-600 text-white rounded-2xl text-sm"><i class="fa-solid fa-print mr-1"></i>Print</button>
                 <button onclick="downloadReReceipt()" class="px-4 py-2 bg-zinc-700 text-white rounded-2xl text-sm"><i class="fa-solid fa-download mr-1"></i>PDF</button>
@@ -155,9 +155,30 @@
     <script>
         // Apply theme & store name from CONFIG
         const theme = THEMES[CONFIG.theme] || THEMES.emerald;
+        const themeColor = theme.primary;
+        const themeColor600 = `${themeColor}-600`;
+        const themeColor700 = `${themeColor}-700`;
         document.documentElement.style.setProperty('--theme-primary', theme.hex);
         document.title = `Laporan — ${CONFIG.storeName}`;
-        document.querySelector('p.text-zinc-400').textContent = `${CONFIG.storeName} POS`;
+        document.getElementById('store-name').textContent = `${CONFIG.storeName} POS`;
+
+        // Set receipt width dynamically
+        const receiptWidth = `${CONFIG.receipt.width}mm`;
+        document.getElementById('reprint-content').style.width = receiptWidth;
+
+        // Apply theme color to static buttons (active tab, export, print)
+        const activeTab = document.getElementById('tab-daily');
+        if (activeTab) {
+            activeTab.className = `tab-btn px-4 py-2 rounded-2xl text-sm font-medium bg-${themeColor600} text-white`;
+        }
+        const exportBtn = document.querySelector('#bestseller-section button[onclick="exportBestSellerExcel()"]');
+        if (exportBtn) {
+            exportBtn.className = `px-4 py-2 bg-${themeColor600} hover:bg-${themeColor700} rounded-2xl text-sm text-white`;
+        }
+        const printBtn = document.querySelector('button[onclick="printReReceipt()"]');
+        if (printBtn) {
+            printBtn.className = `px-4 py-2 bg-${themeColor600} text-white rounded-2xl text-sm`;
+        }
 
         const firebaseConfig = CONFIG.firebase;
 
@@ -179,10 +200,6 @@
         let reprintData = null;
 
         // ─── Tab Switching ───
-        const themeColor = THEMES[CONFIG.theme].primary;
-        const themeColor600 = `${themeColor}-600`;
-        const themeColor700 = `${themeColor}-700`;
-
         function switchTab(tab) {
             currentTab = tab;
             document.querySelectorAll('.tab-btn').forEach(b => {
@@ -392,7 +409,7 @@
                         tr.innerHTML = `
                             <td class="px-4 py-3 text-zinc-400">${i + 1}</td>
                             <td class="px-4 py-3 font-medium">${item.name}</td>
-                            <td class="px-4 py-3 text-center"><span class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs">${item.qty}</span></td>
+                            <td class="px-4 py-3 text-center"><span class="px-2 py-0.5 rounded text-xs" style="background: ${theme.hex}33; color: ${theme.hex}">${item.qty}</span></td>
                             <td class="px-4 py-3 text-right font-semibold">Rp ${item.revenue.toLocaleString('id-ID')}</td>
                         `;
                         tbody.appendChild(tr);
@@ -470,7 +487,7 @@
                             </div>
                             <div class="flex items-center gap-3">
                                 <span class="font-bold text-sm">Rp ${(d.total || 0).toLocaleString('id-ID')}</span>
-                                <button onclick="reprintReceipt('${doc.id}')" class="px-3 py-1.5 bg-emerald-600/80 hover:bg-emerald-600 rounded-xl text-xs text-white">
+                                <button onclick="reprintReceipt('${doc.id}')" class="px-3 py-1.5 bg-${themeColor600}/80 hover:bg-${themeColor600} rounded-xl text-xs text-white">
                                     <i class="fa-solid fa-print mr-1"></i>Reprint
                                 </button>
                             </div>
@@ -593,7 +610,7 @@
                 filename: `REPRINT-${window._reReceiptNo || 'receipt'}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { scale: 2 },
-                jsPDF: { unit: 'mm', format: [80, 200] }
+                jsPDF: { unit: 'mm', format: [CONFIG.receipt.width, 200] }
             };
             html2pdf().set(opt).from(element).save();
         }
