@@ -108,6 +108,21 @@ Format: `POS-DDMMYY-000001`
 - Urutan jalan terus sepanjang tahun
 - Reset ke `000001` setiap tanggal 1 Januari
 
+## 📱 PWA & Build APK
+
+POS ini udah PWA-ready (installable app + bisa dijadiin APK). **Otomatis** — manifest & tema ngambil dari `config.js`, gak perlu edit manual.
+
+**File PWA:** `pwa.js` (dynamic manifest loader), `sw.js` (service worker), `icons/` (icon default).
+
+**Ganti icon per client:** replace file di `icons/` (icon-192.png, icon-512.png, + versi maskable) dengan logo client. Ukuran sama.
+
+**Bikin APK gratis (PWABuilder):**
+1. Deploy dulu (Cloudflare/GitHub Pages), catat URL-nya
+2. Buka https://www.pwabuilder.com → paste URL → Start
+3. Package For Stores → Android → Generate Package
+4. Download ZIP → file `.apk` buat install langsung, `.aab` buat Play Store
+5. Simpan signing key yang dikasih (buat update APK nanti)
+
 ## 🔒 Security
 
 - Semua data Firestore butuh login (auth != null)
