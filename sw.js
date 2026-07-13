@@ -1,10 +1,9 @@
 // Service Worker — Master POS (template)
-const CACHE = 'master-pos-v1';
+const CACHE = 'master-pos-v2';
 const ASSETS = [
   './',
-  './index.html',
-  './login.html',
-  './reports.html',
+  './login',
+  './reports',
   './config.js',
   './pwa.js',
   './icons/icon-192.png',

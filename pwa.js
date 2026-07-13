@@ -19,7 +19,7 @@
     name: name + ' — POS',
     short_name: name.length > 12 ? name.slice(0, 12) : name,
     description: (CONFIG.storeJargon || 'Point of Sale') + ' — ' + name,
-    start_url: './index.html',
+    start_url: './',
     scope: './',
     display: 'standalone',
     orientation: 'any',
