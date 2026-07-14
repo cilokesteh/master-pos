@@ -69,7 +69,7 @@
                         <div class="text-2xl font-bold" id="sum-revenue">Rp 0</div>
                     </div>
                     <div class="bg-zinc-900 rounded-2xl p-5 border border-zinc-800">
-                        <div class="text-zinc-400 text-sm">Laba Kotor</div>
+                        <div class="text-zinc-400 text-sm">Profit</div>
                         <div class="text-2xl font-bold text-emerald-400" id="sum-profit">Rp 0</div>
                     </div>
                     <div class="bg-zinc-900 rounded-2xl p-5 border border-zinc-800">
@@ -483,7 +483,8 @@
 
             const tab = window._currentReportTab || 'daily';
             const period = window._currentReportPeriod || '';
-            const rows = [['No', 'Tanggal', 'Waktu', 'No Struk', 'Customer', 'Metode', 'Total', 'Items']];
+            const rows = [['No', 'Tanggal', 'Waktu', 'No Struk', 'Customer', 'Metode', 'Total', 'Modal', 'Profit', 'Items']];
+            let sumTotal = 0, sumModal = 0, sumProfit = 0;
             window._currentReportData.forEach((d, i) => {
                 const ts = new Date(d.createdAt || 0);
                 const dateStr = ts.toLocaleDateString('id-ID');
@@ -495,11 +496,19 @@
                 const seq = String(d.receiptSeq || 0).padStart(6, '0');
                 const receiptNo = `POS-${dd}${MM}${yy}-${seq}`;
                 const itemStr = (d.items || []).map(item => `${item.name} x${item.qty}`).join('; ');
-                rows.push([i + 1, dateStr, timeStr, receiptNo, d.customerName || 'Walk-in', methodLabel, d.total || 0, itemStr]);
+                // Modal = jumlah harga beli x qty tiap item; Profit = total jual - modal
+                const modal = (d.items || []).reduce((s, item) => s + ((item.costPrice || 0) * (item.qty || 0)), 0);
+                const total = d.total || 0;
+                const profit = total - modal;
+                sumTotal += total; sumModal += modal; sumProfit += profit;
+                rows.push([i + 1, dateStr, timeStr, receiptNo, d.customerName || 'Walk-in', methodLabel, total, modal, profit, itemStr]);
             });
+            // Baris total di bawah
+            rows.push([]);
+            rows.push(['', '', '', '', '', 'TOTAL', sumTotal, sumModal, sumProfit, '']);
 
             const ws = XLSX.utils.aoa_to_sheet(rows);
-            ws['!cols'] = [{ wch: 6 }, { wch: 14 }, { wch: 10 }, { wch: 20 }, { wch: 18 }, { wch: 10 }, { wch: 14 }, { wch: 50 }];
+            ws['!cols'] = [{ wch: 6 }, { wch: 14 }, { wch: 10 }, { wch: 20 }, { wch: 18 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 50 }];
 
             const wb = XLSX.utils.book_new();
             const sheetName = `Laporan ${tab.charAt(0).toUpperCase() + tab.slice(1)} ${period}`.replace(/[\/\\:*?]/g, '-');
