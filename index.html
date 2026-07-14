@@ -879,26 +879,26 @@
         function downloadPdf() {
             const element = document.getElementById('receipt-content');
             const w = CONFIG.receipt.width || 80;
-            
-            // Clone receipt content to a temporary visible element so html2canvas
-            // captures the content instead of a blank rectangle (parent modal is hidden).
-            let tmp = document.getElementById('receipt-pdf-tmp');
-            if (!tmp) {
-                tmp = document.createElement('div');
-                tmp.id = 'receipt-pdf-tmp';
-                tmp.style.cssText = 'position:fixed;left:-9999px;top:0;width:320px;background:white;color:black;padding:8px;font-family:Courier New,monospace;font-size:13px;line-height:1.2;z-index:-1;';
-                document.body.appendChild(tmp);
-            }
-            tmp.innerHTML = element.innerHTML;
-            
+
+            // The receipt modal is OPEN and visible when this runs, so
+            // `receipt-content` is on-screen with real dimensions. Capture it
+            // directly. A previous off-screen clone (left:-9999px) produced a
+            // blank PDF because html2canvas cannot reliably rasterise elements
+            // far outside the viewport.
             const opt = {
                 margin: 0,
                 filename: `${window._lastReceiptNo || 'receipt'}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2 },
+                html2canvas: {
+                    scale: 2,
+                    backgroundColor: '#ffffff',
+                    scrollX: 0,
+                    scrollY: 0,
+                    windowWidth: document.documentElement.offsetWidth
+                },
                 jsPDF: { unit: 'mm', format: [w, 200] }
             };
-            html2pdf().set(opt).from(tmp).save();
+            html2pdf().set(opt).from(element).save();
         }
 
         function sendReceiptToWA() {
