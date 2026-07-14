@@ -136,17 +136,22 @@
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="text-sm text-zinc-400">Harga (Rp)</label>
+                        <label class="text-sm text-zinc-400">Harga Jual (Rp)</label>
                         <input type="number" id="product-price" class="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 mt-1">
                     </div>
+                    <div>
+                        <label class="text-sm text-zinc-400">Harga Beli (Modal) (Rp)</label>
+                        <input type="number" id="product-cost" class="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 mt-1">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="text-sm text-zinc-400">Stok</label>
                         <input type="number" id="product-stock" class="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 mt-1">
                     </div>
-                </div>
-                <div>
-                    <label class="text-sm text-zinc-400">Kategori</label>
-                    <select id="product-category" class="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 mt-1">
+                    <div>
+                        <label class="text-sm text-zinc-400">Kategori</label>
+                        <select id="product-category" class="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 mt-1">
                         <option value="Handphone">Handphone</option>
                         <option value="Aksesoris">Aksesoris</option>
                         <option value="Lainnya">Lainnya</option>
@@ -500,11 +505,13 @@
             if (product) {
                 document.getElementById('product-name').value = product.name;
                 document.getElementById('product-price').value = product.price;
+                document.getElementById('product-cost').value = product.costPrice || 0;
                 document.getElementById('product-stock').value = product.stock;
                 document.getElementById('product-category').value = product.category;
             } else {
                 document.getElementById('product-name').value = '';
                 document.getElementById('product-price').value = '';
+                document.getElementById('product-cost').value = '';
                 document.getElementById('product-stock').value = '';
                 document.getElementById('product-category').value = 'Handphone';
             }
@@ -518,12 +525,13 @@
         function saveProduct() {
             const name = document.getElementById('product-name').value.trim();
             const price = parseInt(document.getElementById('product-price').value);
+            const costPrice = parseInt(document.getElementById('product-cost').value) || 0;
             const stock = parseInt(document.getElementById('product-stock').value);
             const category = document.getElementById('product-category').value;
 
             if (!name || isNaN(price) || isNaN(stock)) return alert('Lengkapi data');
 
-            const data = { name, price, stock, category };
+            const data = { name, price, costPrice, stock, category };
 
             if (editingProductId) {
                 db.collection('demo-products').doc(editingProductId).update(data);
@@ -672,6 +680,7 @@
                         price: item.price,
                         qty: item.qty,
                         subtotal: item.price * item.qty,
+                        costPrice: item.costPrice || 0,
                         imei: item.imei || '',
                         category: item.category || ''
                     })),
@@ -869,6 +878,18 @@
         function downloadPdf() {
             const element = document.getElementById('receipt-content');
             const w = CONFIG.receipt.width || 80;
+            
+            // Clone receipt content to a temporary visible element so html2canvas
+            // captures the content instead of a blank rectangle (parent modal is hidden).
+            let tmp = document.getElementById('receipt-pdf-tmp');
+            if (!tmp) {
+                tmp = document.createElement('div');
+                tmp.id = 'receipt-pdf-tmp';
+                tmp.style.cssText = 'position:fixed;left:-9999px;top:0;width:320px;background:white;color:black;padding:8px;font-family:Courier New,monospace;font-size:13px;line-height:1.2;z-index:-1;';
+                document.body.appendChild(tmp);
+            }
+            tmp.innerHTML = element.innerHTML;
+            
             const opt = {
                 margin: 0,
                 filename: `${window._lastReceiptNo || 'receipt'}.pdf`,
@@ -876,7 +897,7 @@
                 html2canvas: { scale: 2 },
                 jsPDF: { unit: 'mm', format: [w, 200] }
             };
-            html2pdf().set(opt).from(element).save();
+            html2pdf().set(opt).from(tmp).save();
         }
 
         function sendReceiptToWA() {

@@ -59,7 +59,7 @@
                 </div>
 
                 <!-- Summary Cards -->
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
                     <div class="bg-zinc-900 rounded-2xl p-5 border border-zinc-800">
                         <div class="text-zinc-400 text-sm">Transaksi</div>
                         <div class="text-2xl font-bold" id="sum-count" style="color: var(--theme-primary)">0</div>
@@ -67,6 +67,10 @@
                     <div class="bg-zinc-900 rounded-2xl p-5 border border-zinc-800">
                         <div class="text-zinc-400 text-sm">Pendapatan</div>
                         <div class="text-2xl font-bold" id="sum-revenue">Rp 0</div>
+                    </div>
+                    <div class="bg-zinc-900 rounded-2xl p-5 border border-zinc-800">
+                        <div class="text-zinc-400 text-sm">Laba Kotor</div>
+                        <div class="text-2xl font-bold text-emerald-400" id="sum-profit">Rp 0</div>
                     </div>
                     <div class="bg-zinc-900 rounded-2xl p-5 border border-zinc-800">
                         <div class="text-zinc-400 text-sm">Rata-rata</div>
@@ -325,12 +329,18 @@
                 // ---- Summary ----
                 let totalRevenue = 0;
                 let totalItems = 0;
+                let totalProfit = 0;
                 let cashRev = 0, qrisRev = 0, transferRev = 0, splitRev = 0;
 
                 snap.docs.forEach(doc => {
                     const d = doc.data();
                     totalRevenue += d.total || 0;
-                    if (d.items) d.items.forEach(i => totalItems += i.qty || 0);
+                    if (d.items) d.items.forEach(i => {
+                        totalItems += i.qty || 0;
+                        const cost = (i.costPrice || 0) * i.qty;
+                        const sale = i.subtotal || (i.price * i.qty);
+                        totalProfit += sale - cost;
+                    });
                     if (d.method === 'cash') cashRev += d.total || 0;
                     else if (d.method === 'qris') qrisRev += d.total || 0;
                     else if (d.method === 'transfer') transferRev += d.total || 0;
@@ -341,6 +351,7 @@
 
                 document.getElementById('sum-count').textContent = snap.size;
                 document.getElementById('sum-revenue').textContent = `Rp ${totalRevenue.toLocaleString('id-ID')}`;
+                document.getElementById('sum-profit').textContent = `Rp ${totalProfit.toLocaleString('id-ID')}`;
                 document.getElementById('sum-avg').textContent = `Rp ${(snap.size > 0 ? Math.round(totalRevenue / snap.size) : 0).toLocaleString('id-ID')}`;
                 document.getElementById('sum-items').textContent = totalItems;
                 document.getElementById('sum-cash').textContent = `Rp ${cashRev.toLocaleString('id-ID')}`;
