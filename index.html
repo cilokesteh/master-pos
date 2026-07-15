@@ -861,12 +861,11 @@
                     <title>Print ${receiptNo}</title>
                     <style>
                         @page { margin: 0; size: ${w}mm auto; }
-                        body { margin: 0; padding: 0; font-family: 'Courier New', monospace; color: #000; display:flex;justify-content:center; }
-                        #pwrap { width:${w}mm; padding:4mm 2mm; box-sizing:border-box; }
+                        body { margin: 0; padding: 8px; font-family: 'Courier New', monospace; color: #000; }
                         * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                     </style>
                 </head>
-                <body><div id="pwrap">${element.innerHTML}</div></body>
+                <body>${element.innerHTML}</body>
                 </html>
             `);
             printWin.document.close();
@@ -879,30 +878,25 @@
 
         function downloadPdf() {
             const element = document.getElementById('receipt-content');
-            const w = CONFIG.receipt.width || 80; // mm
+            const w = CONFIG.receipt.width || 80;
 
-            html2canvas(element, {
-                scale: 2,
-                backgroundColor: '#ffffff',
-                scrollX: 0,
-                scrollY: 0,
-                windowWidth: document.documentElement.offsetWidth
-            }).then(canvas => {
-                const imgData = canvas.toDataURL('image/jpeg', 0.98);
-                const pdfHeight = (canvas.height / canvas.width) * w;
-
-                const { jsPDF } = window.jspdf;
-                const pdf = new jsPDF({
-                    unit: 'mm',
-                    format: [w, pdfHeight],
-                    orientation: 'portrait'
-                });
-                pdf.addImage(imgData, 'JPEG', 0, 0, w, pdfHeight);
-                pdf.save(`${window._lastReceiptNo || 'receipt'}.pdf`);
-            });
+            const opt = {
+                margin: 0,
+                filename: `${window._lastReceiptNo || 'receipt'}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: {
+                    scale: 2,
+                    backgroundColor: '#ffffff',
+                    scrollX: 0,
+                    scrollY: 0,
+                    windowWidth: document.documentElement.offsetWidth
+                },
+                jsPDF: { unit: 'mm', format: [w, 200] }
+            };
+            html2pdf().set(opt).from(element).save();
         }
 
-        function sendReceiptToWA() {
+        async function sendReceiptToWA() {
             const t = window._lastReceiptData;
             if (!t) return alert('Data struk tidak tersedia.');
 
@@ -912,37 +906,68 @@
             else if (wa.startsWith('8')) wa = '62' + wa;
             else if (!wa.startsWith('62')) wa = '62' + wa;
 
-            // Build date/time
-            const ts = (t.createdAt && typeof t.createdAt === 'number') ? new Date(t.createdAt) :
-                       (t.timestamp && t.timestamp?.toDate) ? new Date(t.timestamp.toDate()) : new Date();
-            const dd = String(ts.getDate()).padStart(2, '0');
-            const MM = String(ts.getMonth() + 1).padStart(2, '0');
-            const yy = String(ts.getFullYear()).slice(-2);
-            const timeStr = ts.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-            const dateStr = `${dd}/${MM}/${yy}`;
-            const seq = String(t.receiptSeq || 1).padStart(6, '0');
-            const receiptNo = `POS-${dd}${MM}${yy}-${seq}`;
-            const methodLabel = t.method === 'cash' ? 'Cash' : t.method === 'qris' ? 'QRIS' : 'Transfer';
+            const element = document.getElementById('receipt-content');
+            const w = CONFIG.receipt.width || 80;
 
-            // Build item lines
-            let itemLines = '';
-            t.items.forEach(item => {
-                itemLines += `${item.name} x${item.qty} = Rp${item.subtotal.toLocaleString('id-ID')}\n`;
-                if (item.imei) {
-                    itemLines += `  IMEI: ${item.imei}\n`;
+            const opt = {
+                margin: 0,
+                filename: `${window._lastReceiptNo || 'receipt'}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: {
+                    scale: 2,
+                    backgroundColor: '#ffffff',
+                    scrollX: 0,
+                    scrollY: 0,
+                    windowWidth: document.documentElement.offsetWidth
+                },
+                jsPDF: { unit: 'mm', format: [w, 200] }
+            };
+
+            try {
+                // Generate PDF as blob
+                const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
+                const pdfFile = new File([pdfBlob], `${window._lastReceiptNo || 'receipt'}.pdf`, { type: 'application/pdf' });
+
+                // Coba kirim via Web Share API (support file sharing di mobile)
+                if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+                    await navigator.share({
+                        files: [pdfFile],
+                        title: `Struk ${window._lastReceiptNo || 'receipt'}`,
+                    });
+                } else {
+                    // Fallback: kirim via wa.me text
+                    const ts = (t.createdAt && typeof t.createdAt === 'number') ? new Date(t.createdAt) :
+                               (t.timestamp && t.timestamp?.toDate) ? new Date(t.timestamp.toDate()) : new Date();
+                    const dd = String(ts.getDate()).padStart(2, '0');
+                    const MM = String(ts.getMonth() + 1).padStart(2, '0');
+                    const yy = String(ts.getFullYear()).slice(-2);
+                    const timeStr = ts.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                    const dateStr = `${dd}/${MM}/${yy}`;
+                    const seq = String(t.receiptSeq || 1).padStart(6, '0');
+                    const receiptNo = `POS-${dd}${MM}${yy}-${seq}`;
+                    const methodLabel = t.method === 'cash' ? 'Cash' : t.method === 'qris' ? 'QRIS' : 'Transfer';
+
+                    let itemLines = '';
+                    t.items.forEach(item => {
+                        itemLines += `${item.name} x${item.qty} = Rp${item.subtotal.toLocaleString('id-ID')}\n`;
+                        if (item.imei) itemLines += `  IMEI: ${item.imei}\n`;
+                    });
+
+                    let cashLines = '';
+                    if (t.method === 'cash') {
+                        cashLines = `Tunai: Rp${t.cash.toLocaleString('id-ID')}\nKembali: Rp${t.change.toLocaleString('id-ID')}\n`;
+                    }
+
+                    const msg = `*${CONFIG.storeName.toUpperCase()}*\n_"${CONFIG.storeJargon}"_\n\n${dateStr} ${timeStr}\nNo: ${receiptNo}\n${'─'.repeat(20)}\nCustomer: ${t.customerName || 'Walk-in'}\nKasir: ${t.kasirName || t.createdBy || 'admin'}\n${'─'.repeat(20)}\n${itemLines}${'─'.repeat(20)}\n*TOTAL: Rp${t.total.toLocaleString('id-ID')}*\nMetode: ${methodLabel}\n${cashLines}${'─'.repeat(20)}\nTerima Kasih 🙏\n\n${CONFIG.storeAddress}\n${CONFIG.storeHours}\nWA: ${CONFIG.storeWA}\nIG: ${CONFIG.storeIG}\n${CONFIG.storeWebsite}`;
+
+                    const url = `https://wa.me/${wa}?text=${encodeURIComponent(msg)}`;
+                    window.open(url, '_blank');
                 }
-            });
-
-            // Cash detail
-            let cashLines = '';
-            if (t.method === 'cash') {
-                cashLines = `Tunai: Rp${t.cash.toLocaleString('id-ID')}\nKembali: Rp${t.change.toLocaleString('id-ID')}\n`;
+            } catch (e) {
+                // Fallback: kirim teks biasa kalo PDF gagal
+                const url = `https://wa.me/${wa}?text=${encodeURIComponent('Struk: ' + window._lastReceiptNo)}`;
+                window.open(url, '_blank');
             }
-
-            const msg = `*${CONFIG.storeName.toUpperCase()}*\n_"${CONFIG.storeJargon}"_\n\n${dateStr} ${timeStr}\nNo: ${receiptNo}\n${'─'.repeat(20)}\nCustomer: ${t.customerName || 'Walk-in'}\nKasir: ${t.kasirName || t.createdBy || 'admin'}\n${'─'.repeat(20)}\n${itemLines}${'─'.repeat(20)}\n*TOTAL: Rp${t.total.toLocaleString('id-ID')}*\nMetode: ${methodLabel}\n${cashLines}${'─'.repeat(20)}\nTerima Kasih 🙏\n\n${CONFIG.storeAddress}\n${CONFIG.storeHours}\nWA: ${CONFIG.storeWA}\nIG: ${CONFIG.storeIG}\n${CONFIG.storeWebsite}`;
-
-            const url = `https://wa.me/${wa}?text=${encodeURIComponent(msg)}`;
-            window.open(url, '_blank');
         }
 
         async function loadTodayStats() {
