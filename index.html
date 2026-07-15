@@ -861,11 +861,12 @@
                     <title>Print ${receiptNo}</title>
                     <style>
                         @page { margin: 0; size: ${w}mm auto; }
-                        body { margin: 0; padding: 8px; font-family: 'Courier New', monospace; color: #000; }
+                        body { margin: 0; padding: 0; font-family: 'Courier New', monospace; color: #000; display:flex;justify-content:center; }
+                        #pwrap { width:${w}mm; padding:4mm 2mm; box-sizing:border-box; }
                         * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                     </style>
                 </head>
-                <body>${element.innerHTML}</body>
+                <body><div id="pwrap">${element.innerHTML}</div></body>
                 </html>
             `);
             printWin.document.close();
@@ -878,27 +879,27 @@
 
         function downloadPdf() {
             const element = document.getElementById('receipt-content');
-            const w = CONFIG.receipt.width || 80;
+            const w = CONFIG.receipt.width || 80; // mm
 
-            // The receipt modal is OPEN and visible when this runs, so
-            // `receipt-content` is on-screen with real dimensions. Capture it
-            // directly. A previous off-screen clone (left:-9999px) produced a
-            // blank PDF because html2canvas cannot reliably rasterise elements
-            // far outside the viewport.
-            const opt = {
-                margin: 0,
-                filename: `${window._lastReceiptNo || 'receipt'}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: {
-                    scale: 2,
-                    backgroundColor: '#ffffff',
-                    scrollX: 0,
-                    scrollY: 0,
-                    windowWidth: document.documentElement.offsetWidth
-                },
-                jsPDF: { unit: 'mm', format: [w, 200] }
-            };
-            html2pdf().set(opt).from(element).save();
+            html2canvas(element, {
+                scale: 2,
+                backgroundColor: '#ffffff',
+                scrollX: 0,
+                scrollY: 0,
+                windowWidth: document.documentElement.offsetWidth
+            }).then(canvas => {
+                const imgData = canvas.toDataURL('image/jpeg', 0.98);
+                const pdfHeight = (canvas.height / canvas.width) * w;
+
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({
+                    unit: 'mm',
+                    format: [w, pdfHeight],
+                    orientation: 'portrait'
+                });
+                pdf.addImage(imgData, 'JPEG', 0, 0, w, pdfHeight);
+                pdf.save(`${window._lastReceiptNo || 'receipt'}.pdf`);
+            });
         }
 
         function sendReceiptToWA() {
