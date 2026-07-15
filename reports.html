@@ -320,6 +320,18 @@
             const { start, end } = getDateRange();
 
             try {
+                // Load ALL products first so we can look up the CURRENT
+                // costPrice (harga modal) instead of relying on the possibly-0
+                // value stored in old transactions.
+                const prodSnap = await db.collection('demo-products').get();
+                const prodCost = {};
+                prodSnap.docs.forEach(d => {
+                    const p = d.data();
+                    if (p.name && p.costPrice) prodCost[p.name] = p.costPrice;
+                });
+                // Expose for Excel export
+                window._currentProductCost = prodCost;
+
                 const snap = await db.collection('demo-transactions')
                     .where('createdAt', '>=', start.getTime())
                     .where('createdAt', '<', end.getTime())
@@ -337,7 +349,10 @@
                     totalRevenue += d.total || 0;
                     if (d.items) d.items.forEach(i => {
                         totalItems += i.qty || 0;
-                        const cost = (i.costPrice || 0) * i.qty;
+                        // Use the CURRENT product costPrice (from prodCost map),
+                        // falling back to the transaction-stored value, then 0.
+                        const currentCost = prodCost[i.name] ?? i.costPrice ?? 0;
+                        const cost = currentCost * (i.qty || 0);
                         const sale = i.subtotal || (i.price * i.qty);
                         totalProfit += sale - cost;
                     });
@@ -497,7 +512,11 @@
                 const receiptNo = `POS-${dd}${MM}${yy}-${seq}`;
                 const itemStr = (d.items || []).map(item => `${item.name} x${item.qty}`).join('; ');
                 // Modal = jumlah harga beli x qty tiap item; Profit = total jual - modal
-                const modal = (d.items || []).reduce((s, item) => s + ((item.costPrice || 0) * (item.qty || 0)), 0);
+                // Pakai productCostMap (nilai terbaru dari produk) kalo ada
+                const modal = (d.items || []).reduce((s, item) => {
+                    const cp = window._currentProductCost?.[item.name] ?? item.costPrice ?? 0;
+                    return s + (cp * (item.qty || 0));
+                }, 0);
                 const total = d.total || 0;
                 const profit = total - modal;
                 sumTotal += total; sumModal += modal; sumProfit += profit;
