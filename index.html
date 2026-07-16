@@ -9,6 +9,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body class="bg-zinc-950 text-zinc-200">
     <div class="min-h-screen">
@@ -879,6 +880,7 @@
         function downloadPdf() {
             const element = document.getElementById('receipt-content');
             const w = CONFIG.receipt.width || 80;
+            const t = window._lastReceiptData;
 
             const opt = {
                 margin: 0,
@@ -887,13 +889,80 @@
                 html2canvas: {
                     scale: 2,
                     backgroundColor: '#ffffff',
+                    useCORS: true,
+                    allowTaint: true,
                     scrollX: 0,
                     scrollY: 0,
-                    windowWidth: document.documentElement.offsetWidth
+                    windowWidth: Math.max(400, element.scrollWidth || window.innerWidth || document.documentElement.offsetWidth)
                 },
                 jsPDF: { unit: 'mm', format: [w, 200] }
             };
-            html2pdf().set(opt).from(element).save();
+
+            // Coba html2pdf capture dulu. Kalau blob < 1KB (blank), fallback ke text-based PDF.
+            html2pdf().set(opt).from(element).outputPdf('blob').then(blob => {
+                if (blob.size < 1000 && t) {
+                    // html2pdf blank — fallback ke text PDF biar tetep kebaca
+                    const doc = buildTextReceipt(t, w);
+                    if (doc) doc.save(`${window._lastReceiptNo || 'receipt'}.pdf`);
+                    else { html2pdf().set(opt).from(element).save(); } // fallback safenet
+                } else {
+                    html2pdf().set(opt).from(element).save();
+                }
+            }).catch(() => {
+                // html2pdf error — coba text fallback
+                if (t) { const doc = buildTextReceipt(t, w); if (doc) doc.save(`${window._lastReceiptNo || 'receipt'}.pdf`); }
+            });
+        }
+
+        // Helper: bangun PDF dari teks (html2canvas gagal di PWA tertentu)
+        function buildTextReceipt(t, w) {
+            if (!t) return null;
+            try {
+                if (typeof window.jspdf === 'undefined') return null;
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ unit: 'mm', format: [w, 150], orientation: 'portrait' });
+
+                const ts = (t.createdAt && typeof t.createdAt === 'number') ? new Date(t.createdAt) :
+                           (t.timestamp && t.timestamp?.toDate) ? new Date(t.timestamp.toDate()) : new Date();
+                const dd = String(ts.getDate()).padStart(2, '0');
+                const MM = String(ts.getMonth() + 1).padStart(2, '0');
+                const yy = String(ts.getFullYear()).slice(-2);
+                const timeStr = ts.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                const dateStr = `${dd}/${MM}/${yy}`;
+                const seq = String(t.receiptSeq || 1).padStart(6, '0');
+                const receiptNo = `POS-${dd}${MM}${yy}-${seq}`;
+
+                let y = 5, lh = 4;
+                const mg = 3, cx = w / 2;
+
+                doc.setFont('Courier', 'normal');
+                doc.setFontSize(10);
+                doc.text(CONFIG.storeName || 'Receipt', cx, y, { align: 'center' }); y += lh;
+                doc.setFontSize(7);
+                doc.text(`#${receiptNo}  ${dateStr} ${timeStr}`, cx, y, { align: 'center' }); y += lh;
+                doc.text(`Customer: ${t.customerName || 'Walk-in'}`, cx, y, { align: 'center' }); y += lh;
+                doc.text('─'.repeat(28), mg, y); y += lh + 1;
+
+                t.items.forEach(item => {
+                    doc.text(`${item.name}`, mg, y); y += lh;
+                    const sub = `Rp${(item.subtotal || item.price * item.qty || 0).toLocaleString('id-ID')}`;
+                    doc.text(`  ${item.qty}x @ Rp${(item.price || 0).toLocaleString('id-ID')}  =  ${sub}`, mg, y); y += lh;
+                    if (item.imei) { doc.text(`  IMEI: ${item.imei}`, mg, y); y += lh; }
+                });
+
+                doc.text('─'.repeat(28), mg, y); y += lh + 1;
+                doc.setFontSize(9);
+                doc.text(`TOTAL: Rp${(t.total || 0).toLocaleString('id-ID')}`, mg, y); y += lh;
+                doc.setFontSize(7);
+                if (t.method === 'cash') {
+                    doc.text(`Tunai: Rp${(t.cash || 0).toLocaleString('id-ID')}`, mg, y); y += lh;
+                    doc.text(`Kembali: Rp${(t.change || 0).toLocaleString('id-ID')}`, mg, y); y += lh;
+                } else { doc.text(`Metode: ${t.method === 'qris' ? 'QRIS' : 'Transfer'}`, mg, y); y += lh; }
+                y += 2;
+                doc.setFontSize(8);
+                doc.text('Terima Kasih', cx, y, { align: 'center' }); y += lh;
+                return doc;
+            } catch (e) { return null; }
         }
 
         async function sendReceiptToWA() {
@@ -916,58 +985,72 @@
                 html2canvas: {
                     scale: 2,
                     backgroundColor: '#ffffff',
+                    useCORS: true,
+                    allowTaint: true,
                     scrollX: 0,
                     scrollY: 0,
-                    windowWidth: document.documentElement.offsetWidth
+                    windowWidth: Math.max(400, element.scrollWidth || window.innerWidth || document.documentElement.offsetWidth)
                 },
                 jsPDF: { unit: 'mm', format: [w, 200] }
             };
 
-            try {
-                // Generate PDF as blob
-                const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
+            async function trySharePdf(pdfBlob) {
                 const pdfFile = new File([pdfBlob], `${window._lastReceiptNo || 'receipt'}.pdf`, { type: 'application/pdf' });
-
-                // Coba kirim via Web Share API (support file sharing di mobile)
                 if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-                    await navigator.share({
-                        files: [pdfFile],
-                        title: `Struk ${window._lastReceiptNo || 'receipt'}`,
-                    });
-                } else {
-                    // Fallback: kirim via wa.me text
-                    const ts = (t.createdAt && typeof t.createdAt === 'number') ? new Date(t.createdAt) :
-                               (t.timestamp && t.timestamp?.toDate) ? new Date(t.timestamp.toDate()) : new Date();
-                    const dd = String(ts.getDate()).padStart(2, '0');
-                    const MM = String(ts.getMonth() + 1).padStart(2, '0');
-                    const yy = String(ts.getFullYear()).slice(-2);
-                    const timeStr = ts.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-                    const dateStr = `${dd}/${MM}/${yy}`;
-                    const seq = String(t.receiptSeq || 1).padStart(6, '0');
-                    const receiptNo = `POS-${dd}${MM}${yy}-${seq}`;
-                    const methodLabel = t.method === 'cash' ? 'Cash' : t.method === 'qris' ? 'QRIS' : 'Transfer';
+                    await navigator.share({ files: [pdfFile], title: `Struk ${window._lastReceiptNo || 'receipt'}` });
+                    return true;
+                }
+                return false;
+            }
 
-                    let itemLines = '';
-                    t.items.forEach(item => {
-                        itemLines += `${item.name} x${item.qty} = Rp${item.subtotal.toLocaleString('id-ID')}\n`;
-                        if (item.imei) itemLines += `  IMEI: ${item.imei}\n`;
-                    });
-
-                    let cashLines = '';
-                    if (t.method === 'cash') {
-                        cashLines = `Tunai: Rp${t.cash.toLocaleString('id-ID')}\nKembali: Rp${t.change.toLocaleString('id-ID')}\n`;
-                    }
-
-                    const msg = `*${CONFIG.storeName.toUpperCase()}*\n_"${CONFIG.storeJargon}"_\n\n${dateStr} ${timeStr}\nNo: ${receiptNo}\n${'─'.repeat(20)}\nCustomer: ${t.customerName || 'Walk-in'}\nKasir: ${t.kasirName || t.createdBy || 'admin'}\n${'─'.repeat(20)}\n${itemLines}${'─'.repeat(20)}\n*TOTAL: Rp${t.total.toLocaleString('id-ID')}*\nMetode: ${methodLabel}\n${cashLines}${'─'.repeat(20)}\nTerima Kasih 🙏\n\n${CONFIG.storeAddress}\n${CONFIG.storeHours}\nWA: ${CONFIG.storeWA}\nIG: ${CONFIG.storeIG}\n${CONFIG.storeWebsite}`;
-
-                    const url = `https://wa.me/${wa}?text=${encodeURIComponent(msg)}`;
-                    window.open(url, '_blank');
+            try {
+                let pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
+                // Kalau html2pdf blank (blob kecil), coba text fallback
+                if (pdfBlob.size < 1000) {
+                    const doc = buildTextReceipt(t, w);
+                    if (doc) pdfBlob = doc.output('blob');
+                }
+                const shared = await trySharePdf(pdfBlob);
+                if (!shared) {
+                    // Fallback kirim teks WA
+                    sendReceiptText(t, wa);
                 }
             } catch (e) {
-                // Fallback: kirim teks biasa kalo PDF gagal
-                const url = `https://wa.me/${wa}?text=${encodeURIComponent('Struk: ' + window._lastReceiptNo)}`;
-                window.open(url, '_blank');
+                // Fallback: text PDF atau teks biasa
+                try {
+                    const doc = buildTextReceipt(t, w);
+                    if (doc) {
+                        const pdfBlob = doc.output('blob');
+                        const shared = await trySharePdf(pdfBlob);
+                        if (!shared) sendReceiptText(t, wa);
+                    } else { sendReceiptText(t, wa); }
+                } catch (_) { sendReceiptText(t, wa); }
             }
+        }
+
+        function sendReceiptText(t, wa) {
+            if (!t || !wa) return;
+            const ts = (t.createdAt && typeof t.createdAt === 'number') ? new Date(t.createdAt) :
+                       (t.timestamp && t.timestamp?.toDate) ? new Date(t.timestamp.toDate()) : new Date();
+            const dd = String(ts.getDate()).padStart(2, '0');
+            const MM = String(ts.getMonth() + 1).padStart(2, '0');
+            const yy = String(ts.getFullYear()).slice(-2);
+            const timeStr = ts.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+            const dateStr = `${dd}/${MM}/${yy}`;
+            const seq = String(t.receiptSeq || 1).padStart(6, '0');
+            const receiptNo = `POS-${dd}${MM}${yy}-${seq}`;
+            const methodLabel = t.method === 'cash' ? 'Cash' : t.method === 'qris' ? 'QRIS' : 'Transfer';
+            let itemLines = '';
+            t.items.forEach(item => {
+                itemLines += `${item.name} x${item.qty} = Rp${item.subtotal.toLocaleString('id-ID')}\n`;
+                if (item.imei) itemLines += `  IMEI: ${item.imei}\n`;
+            });
+            let cashLines = '';
+            if (t.method === 'cash') {
+                cashLines = `Tunai: Rp${t.cash.toLocaleString('id-ID')}\nKembali: Rp${t.change.toLocaleString('id-ID')}\n`;
+            }
+            const msg = `*${CONFIG.storeName.toUpperCase()}*\n_"${CONFIG.storeJargon}"_\n\n${dateStr} ${timeStr}\nNo: ${receiptNo}\n${'─'.repeat(20)}\nCustomer: ${t.customerName || 'Walk-in'}\nKasir: ${t.kasirName || t.createdBy || 'admin'}\n${'─'.repeat(20)}\n${itemLines}${'─'.repeat(20)}\n*TOTAL: Rp${t.total.toLocaleString('id-ID')}*\nMetode: ${methodLabel}\n${cashLines}${'─'.repeat(20)}\nTerima Kasih 🙏\n\n${CONFIG.storeAddress}\n${CONFIG.storeHours}\nWA: ${CONFIG.storeWA}\nIG: ${CONFIG.storeIG}\n${CONFIG.storeWebsite}`;
+            window.open(`https://wa.me/${wa}?text=${encodeURIComponent(msg)}`, '_blank');
         }
 
         async function loadTodayStats() {
