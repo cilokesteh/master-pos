@@ -738,7 +738,7 @@
                     <title>Reprint ${receiptNo}</title>
                     <style>
                         @page { margin: 0; size: ${w}mm auto; }
-                        body { margin: 0; padding: 8px; font-family: 'Courier New', monospace; color: #000; }
+                        body { margin: 0; padding: 8px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #000; }
                         * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                         .no-print { margin-top: 12px; text-align: center; }
                         .no-print button { padding: 8px 18px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
@@ -829,13 +829,13 @@
                 let y = 6, lh = 4.2;
                 const sep = '\u2550'.repeat(Math.floor((w - 8) / 2.2));
                 const thinSep = '\u2500'.repeat(Math.floor((w - 8) / 2.2));
-                doc.setFont('Courier', 'bold');
+                doc.setFont('Helvetica', 'bold');
                 doc.setFontSize(14);
                 doc.text((CONFIG.storeName || 'STORE').toUpperCase(), cx, y, { align: 'center' }); y += 5.5;
-                doc.setFont('Courier', 'italic');
+                doc.setFont('Helvetica', 'italic');
                 doc.setFontSize(7);
                 doc.text(`"${CONFIG.storeJargon || ''}"`, cx, y, { align: 'center' }); y += lh + 1;
-                doc.setFont('Courier', 'normal');
+                doc.setFont('Helvetica', 'normal');
                 doc.setFontSize(7);
                 doc.text(`** REPRINT **  ${dateStr} ${timeStr}`, cx, y, { align: 'center' }); y += lh;
                 doc.text(receiptNo, cx, y, { align: 'center' }); y += lh + 2;
@@ -848,22 +848,22 @@
                     const name = (item.name || '').substring(0, 22);
                     const qty = item.qty || 1;
                     const sub = item.subtotal || ((item.price || 0) * qty);
-                    doc.setFont('Courier', 'bold');
+                    doc.setFont('Helvetica', 'bold');
                     doc.text(name, mg, y);
-                    doc.setFont('Courier', 'normal');
+                    doc.setFont('Helvetica', 'normal');
                     doc.text(qty + 'x', mg + name.length * 2.1 + 2, y);
                     doc.text('Rp' + sub.toLocaleString('id-ID'), right, y, { align: 'right' });
                     y += lh;
                 });
                 doc.text(sep, mg, y); y += lh + 2;
-                doc.setFont('Courier', 'bold');
+                doc.setFont('Helvetica', 'bold');
                 doc.setFontSize(10);
                 doc.text('TOTAL', mg, y); doc.text('Rp' + (t.total || 0).toLocaleString('id-ID'), right, y, { align: 'right' }); y += lh + 2;
-                doc.setFont('Courier', 'normal');
+                doc.setFont('Helvetica', 'normal');
                 doc.setFontSize(7.5);
                 doc.text('Metode', mg, y); doc.text(methodLabel, right, y, { align: 'right' }); y += lh + 2;
                 doc.text(thinSep, mg, y); y += lh + 2;
-                doc.setFont('Courier', 'bold');
+                doc.setFont('Helvetica', 'bold');
                 doc.setFontSize(8);
                 doc.text('Terima Kasih (REPRINT)', cx, y, { align: 'center' });
                 return doc;
