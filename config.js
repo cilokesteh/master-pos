@@ -40,8 +40,8 @@ const CONFIG = {
     },
 
     // ─── Admin Default ───
-    // Buat user admin di Firebase Console → Authentication → Users
-    // Email & password ini cuma untuk preview, buat asli di Firebase Console
+    // Akun demo sengaja publik. Isolasi data wajib ditegakkan oleh firestore.rules:
+    // demo admin hanya boleh mengakses collection demo-*, bukan data Warung Salem.
     adminHint: {
         email: "admin@tokodemo.com",
         password: "demo1234"

@@ -32,17 +32,7 @@ const CONFIG = {
 2. Add Web App → copy config ke `config.js`
 3. **Authentication** → Sign-in method → Enable **Email/Password**
 4. **Authentication** → Users → **Add User** (email + password admin)
-5. **Firestore Database** → Create → set rules:
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
-    }
-  }
-}
-```
+5. **Firestore Database** → Create → deploy the repository's hardened `firestore.rules` file. Do **not** use a generic `request.auth != null` rule; this template isolates the public demo collections from Warung Salem production collections by admin email.
 
 ### 3. Deploy
 **Option A: Cloudflare Pages**

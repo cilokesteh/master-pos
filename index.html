@@ -397,8 +397,8 @@
                 div.className = 'flex justify-between items-center p-3 bg-zinc-950 rounded-2xl border border-zinc-800 hover:border-emerald-500';
                 div.innerHTML = `
                     <div class="flex-1 cursor-pointer" onclick="addToCart('${product.id}')">
-                        <div class="font-medium">${product.name}</div>
-                        <div class="text-xs text-zinc-400">${product.category} • Stok: <span class="${product.stock >= 5 ? 'text-emerald-400' : 'text-red-400'}">${product.stock}</span></div>
+                        <div class="font-medium">${esc(product.name)}</div>
+                        <div class="text-xs text-zinc-400">${esc(product.category)} • Stok: <span class="${product.stock >= 5 ? 'text-emerald-400' : 'text-red-400'}">${product.stock}</span></div>
                         <div class="font-semibold text-emerald-400">Rp ${product.price.toLocaleString('id-ID')}</div>
                     </div>
                     <div class="flex gap-2 ml-2">
@@ -474,7 +474,7 @@
                 div.innerHTML = `
                     <div class="flex justify-between items-center">
                         <div>
-                            <div class="font-medium">${item.name}</div>
+                            <div class="font-medium">${esc(item.name)}</div>
                             <div class="text-xs text-zinc-400">Rp ${item.price.toLocaleString('id-ID')} × ${item.qty}</div>
                         </div>
                         <div class="flex items-center gap-x-3">
@@ -869,6 +869,7 @@
             const w = CONFIG.receipt.width || 80;
             
             const printWin = window.open('', '_blank', 'width=400,height=600');
+            if (!printWin) { alert('Popup print diblokir browser. Izinkan popup lalu coba lagi.'); return; }
             printWin.document.write(`
                 <!DOCTYPE html>
                 <html>
@@ -934,7 +935,6 @@
         }
 
         // Helper: bangun PDF dari teks (html2canvas gagal di PWA tertentu)
-        // Helper: bangun PDF dari teks (html2canvas gagal di PWA tertentu)
         function buildTextReceipt(t, w) {
             if (!t) return null;
             try {
@@ -955,13 +955,16 @@
                 const methodLabel = t.method === 'cash' ? 'CASH' : t.method === 'qris' ? 'QRIS' : 'TRANSFER';
 
                 const itemCount = (t.items || []).length;
-                const estimatedHeight = 70 + (itemCount * 12) + 40;
+                const estimatedHeight = 70 + (itemCount * 14) + 40;
                 const doc = new jsPDF({ unit: 'mm', format: [w, Math.max(estimatedHeight, 100)], orientation: 'portrait' });
 
-                const mg = 4, cx = w / 2, right = w - mg;
-                let y = 6, lh = 4.2;
-                const sep = '\u2550'.repeat(Math.floor((w - 8) / 2.2));
-                const thinSep = '\u2500'.repeat(Math.floor((w - 8) / 2.2));
+                const mg = 4, cx = w / 2, right = w - mg, lineMax = w - 8;
+                let y = 6, lh = 4.5;
+
+                function drawLine(pos, thick) {
+                    doc.setLineWidth(thick ? 0.4 : 0.15);
+                    doc.line(mg, pos, mg + lineMax, pos);
+                }
 
                 // ── HEADER ──
                 doc.setFont('Helvetica', 'bold');
@@ -975,9 +978,8 @@
                 doc.text(dateStr + '  ' + timeStr, cx, y, { align: 'center' }); y += lh;
                 doc.text(receiptNo, cx, y, { align: 'center' }); y += lh + 2;
 
-                // ── DOUBLE LINE ──
-                doc.setFontSize(7);
-                doc.text(sep, mg, y); y += lh + 1;
+                // ── THICK LINE ──
+                drawLine(y, true); y += 2;
 
                 // ── CUSTOMER & KASIR ──
                 doc.setFont('Helvetica', 'normal');
@@ -988,23 +990,28 @@
                 doc.text(t.kasirName || 'admin', right, y, { align: 'right' }); y += lh + 1;
 
                 // ── THIN LINE ──
-                doc.text(thinSep, mg, y); y += lh + 1;
+                drawLine(y, false); y += 2;
+
+                // ── ITEMS HEADER ──
+                doc.setFont('Helvetica', 'bold');
+                doc.setFontSize(7.5);
+                doc.text('Item', mg, y);
+                doc.text('Subtotal', right, y, { align: 'right' }); y += lh;
 
                 // ── ITEMS ──
                 doc.setFontSize(7.5);
                 (t.items || []).forEach(item => {
-                    const name = (item.name || '').substring(0, 22);
+                    const name = (item.name || '').substring(0, 24);
                     const qty = item.qty || 1;
                     const price = item.price || 0;
                     const sub = item.subtotal || (price * qty);
                     doc.setFont('Helvetica', 'bold');
-                    doc.text(name, mg, y);
+                    doc.text(name + ' x' + qty, mg, y);
                     doc.setFont('Helvetica', 'normal');
-                    doc.text(qty + 'x', mg + name.length * 2.1 + 2, y);
                     doc.text('Rp' + sub.toLocaleString('id-ID'), right, y, { align: 'right' });
                     y += lh;
                     doc.setFontSize(6.5);
-                    doc.text('  @ Rp' + price.toLocaleString('id-ID'), mg + 2, y);
+                    doc.text('@ Rp' + price.toLocaleString('id-ID') + ' x ' + qty, mg + 2, y);
                     doc.setFontSize(7.5);
                     y += lh + 0.5;
                     if (item.imei) {
@@ -1015,19 +1022,19 @@
                     }
                 });
 
-                // ── DOUBLE LINE ──
-                doc.text(sep, mg, y); y += lh + 2;
+                // ── THICK LINE ──
+                drawLine(y, true); y += 3;
 
                 // ── TOTAL ──
                 doc.setFont('Helvetica', 'bold');
-                doc.setFontSize(10);
+                doc.setFontSize(11);
                 doc.text('TOTAL', mg, y);
                 doc.text('Rp' + (t.total || 0).toLocaleString('id-ID'), right, y, { align: 'right' });
                 y += lh + 2;
 
                 // ── PAYMENT INFO ──
                 doc.setFont('Helvetica', 'normal');
-                doc.setFontSize(7.5);
+                doc.setFontSize(8);
                 doc.text('Metode', mg, y);
                 doc.text(methodLabel, right, y, { align: 'right' }); y += lh;
                 if (t.method === 'cash') {
@@ -1039,14 +1046,14 @@
 
                 // ── THIN LINE ──
                 y += 1;
-                doc.text(thinSep, mg, y); y += lh + 2;
+                drawLine(y, false); y += 3;
 
                 // ── FOOTER ──
                 doc.setFont('Helvetica', 'bold');
-                doc.setFontSize(8);
+                doc.setFontSize(9);
                 doc.text('Terima Kasih', cx, y, { align: 'center' }); y += lh + 1;
                 doc.setFont('Helvetica', 'normal');
-                doc.setFontSize(6);
+                doc.setFontSize(6.5);
                 const addrLines = (CONFIG.storeAddress || '').split('\n');
                 addrLines.forEach(line => { doc.text(line.trim(), cx, y, { align: 'center' }); y += 3.2; });
                 doc.text(CONFIG.storeHours || '', cx, y, { align: 'center' }); y += 3.2;
