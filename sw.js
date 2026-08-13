@@ -1,5 +1,5 @@
 // Service Worker — Master POS (template)
-const CACHE = 'master-pos-v19';
+const CACHE = 'master-pos-v20';
 const ASSETS = [
   './',
   './login',
@@ -28,10 +28,11 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// Fetch: skip Firebase/API, network-first untuk HTML, cache-first untuk asset statis
+// Fetch: skip Firebase/API/CDN (never cache third-party — CDN changes break icons/PDF), network-first untuk HTML, cache-first untuk asset statis
 self.addEventListener('fetch', (e) => {
   const url = e.request.url;
-  if (url.includes('firestore') || url.includes('googleapis') || url.includes('firebase') || url.includes('gstatic')) {
+  if (url.includes('firestore') || url.includes('googleapis') || url.includes('firebase') || url.includes('gstatic') ||
+      url.includes('cdnjs') || url.includes('cdn.tailwindcss') || url.includes('cdn.jsdelivr')) {
     return;
   }
 
