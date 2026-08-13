@@ -860,10 +860,14 @@
                     const name = (item.name || '').substring(0, 24);
                     const qty = item.qty || 1;
                     const sub = item.subtotal || ((item.price || 0) * qty);
+                    const priceStr = 'Rp' + sub.toLocaleString('id-ID');
                     doc.setFont('Helvetica', 'bold');
-                    doc.text(name + ' x' + qty, mg, y);
+                    const availLeft = (right - mg) - doc.getTextWidth(priceStr) - 3;
+                    let label = name + ' x' + qty;
+                    while (label.length > 4 && doc.getTextWidth(label) > availLeft) label = label.slice(0, -1);
+                    doc.text(label, mg, y);
                     doc.setFont('Helvetica', 'normal');
-                    doc.text('Rp' + sub.toLocaleString('id-ID'), right, y, { align: 'right' });
+                    doc.text(priceStr, right, y, { align: 'right' });
                     y += lh + 1;
                 });
                 drawLine(y, true); y += 3;
