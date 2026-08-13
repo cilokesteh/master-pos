@@ -965,67 +965,17 @@
             } catch (e) { return null; }
         }
 
-        async function sendReceiptToWA() {
+        function sendReceiptToWA() {
             const t = window._lastReceiptData;
             if (!t) return alert('Data struk tidak tersedia.');
 
-            // Format WA number: strip non-digits, convert 08xx → 628xx
-            let wa = (t.customerWA || '').replace(/\D/g, '');
+            // Always open the customer chat directly. Web Share cannot target a WhatsApp number.
+            let wa = String(t.customerWA || '').replace(/\D/g, '');
+            if (!wa) return alert('Customer tidak punya nomor WhatsApp');
             if (wa.startsWith('0')) wa = '62' + wa.slice(1);
             else if (wa.startsWith('8')) wa = '62' + wa;
             else if (!wa.startsWith('62')) wa = '62' + wa;
-
-            const element = document.getElementById('receipt-content');
-            const w = CONFIG.receipt.width || 80;
-
-            const opt = {
-                margin: 0,
-                filename: `${window._lastReceiptNo || 'receipt'}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: {
-                    scale: 2,
-                    backgroundColor: '#ffffff',
-                    useCORS: true,
-                    allowTaint: true,
-                    scrollX: 0,
-                    scrollY: 0,
-                    windowWidth: Math.max(400, element.scrollWidth || window.innerWidth || document.documentElement.offsetWidth)
-                },
-                jsPDF: { unit: 'mm', format: [w, 200] }
-            };
-
-            async function trySharePdf(pdfBlob) {
-                const pdfFile = new File([pdfBlob], `${window._lastReceiptNo || 'receipt'}.pdf`, { type: 'application/pdf' });
-                if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-                    await navigator.share({ files: [pdfFile], title: `Struk ${window._lastReceiptNo || 'receipt'}` });
-                    return true;
-                }
-                return false;
-            }
-
-            try {
-                let pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
-                // Kalau html2pdf blank (blob kecil), coba text fallback
-                if (pdfBlob.size < 1000) {
-                    const doc = buildTextReceipt(t, w);
-                    if (doc) pdfBlob = doc.output('blob');
-                }
-                const shared = await trySharePdf(pdfBlob);
-                if (!shared) {
-                    // Fallback kirim teks WA
-                    sendReceiptText(t, wa);
-                }
-            } catch (e) {
-                // Fallback: text PDF atau teks biasa
-                try {
-                    const doc = buildTextReceipt(t, w);
-                    if (doc) {
-                        const pdfBlob = doc.output('blob');
-                        const shared = await trySharePdf(pdfBlob);
-                        if (!shared) sendReceiptText(t, wa);
-                    } else { sendReceiptText(t, wa); }
-                } catch (_) { sendReceiptText(t, wa); }
-            }
+            sendReceiptText(t, wa);
         }
 
         function sendReceiptText(t, wa) {
