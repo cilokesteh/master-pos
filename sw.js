@@ -1,5 +1,5 @@
 // Service Worker — Master POS (template)
-const CACHE = 'master-pos-v20';
+const CACHE = 'master-pos-v21';
 const ASSETS = [
   './',
   './login',
