@@ -82,7 +82,7 @@
                 } else if (error.code === 'auth/network-request-failed') {
                     errorMessage.textContent = 'Gagal koneksi ke server. Cek internet.';
                 } else {
-                    errorMessage.textContent = 'Error: ' + error.code;
+                    errorMessage.textContent = 'Terjadi kesalahan. Coba lagi.';
                 }
                 errorMessage.classList.remove('hidden');
             }

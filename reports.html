@@ -167,6 +167,11 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 
     <script>
+        // Escape HTML — pencegahan stored XSS dari data Firestore
+        function esc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
         // Apply theme & store name from CONFIG
         const theme = THEMES[CONFIG.theme] || THEMES.emerald;
         const themeColor = theme.primary;
@@ -619,8 +624,8 @@
                 html += `<div style="width:100%;text-align:center;max-width:${CONFIG.receipt.width}mm;margin:0 auto;">`;
                 // Header
                 html += `<div style="margin-bottom:6px;">`;
-                html += `<div style="font-size:16px;font-weight:bold;letter-spacing:1px;">${CONFIG.storeName.toUpperCase()}</div>`;
-                html += `<div style="font-size:10px;font-style:italic;margin:2px 0;">"${CONFIG.storeJargon}"</div>`;
+                html += `<div style="font-size:16px;font-weight:bold;letter-spacing:1px;">${esc(CONFIG.storeName.toUpperCase())}</div>`;
+                html += `<div style="font-size:10px;font-style:italic;margin:2px 0;">"${esc(CONFIG.storeJargon)}"</div>`;
                 html += `<div style="font-size:10px;">${dateStr} ${timeStr}</div>`;
                 html += `<div style="font-size:10px;margin-top:2px;border:1px solid #ccc;display:inline-block;padding:0 6px;">${receiptNo}</div>`;
                 html += `</div>`;
@@ -634,11 +639,11 @@
                 const kasirName = d.kasirName || d.createdBy || 'admin';
                 html += `<div style="display:flex;justify-content:space-between;font-size:11px;">`;
                 html += `<span>Customer</span>`;
-                html += `<span>${custName}</span>`;
+                html += `<span>${esc(custName)}</span>`;
                 html += `</div>`;
                 html += `<div style="display:flex;justify-content:space-between;font-size:11px;">`;
                 html += `<span>Kasir</span>`;
-                html += `<span>${kasirName}</span>`;
+                html += `<span>${esc(kasirName)}</span>`;
                 html += `</div>`;
                 // Items
                 html += `<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">`;
@@ -647,7 +652,7 @@
                 html += `</div>`;
                 (d.items || []).forEach(item => {
                     html += `<div style="display:flex;justify-content:space-between;font-size:11px;">`;
-                    html += `<span>${item.name} x${item.qty}</span>`;
+                    html += `<span>${esc(item.name)} x${item.qty}</span>`;
                     html += `<span>${(item.subtotal || 0).toLocaleString('id-ID')}</span>`;
                     html += `</div>`;
                 });
@@ -681,10 +686,10 @@
                         html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>Transfer</span><span>${d.split.transfer.toLocaleString('id-ID')}</span></div>`;
                     }
                     if (d.split.cardType) {
-                        html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>Kartu</span><span>${d.split.cardType.toUpperCase()}</span></div>`;
+                        html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>Kartu</span><span>${esc(d.split.cardType.toUpperCase())}</span></div>`;
                     }
                     if (d.split.cardNumber) {
-                        html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>No Kartu</span><span>${d.split.cardNumber}</span></div>`;
+                        html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>No Kartu</span><span>${esc(d.split.cardNumber)}</span></div>`;
                     }
                 }
                 // Footer
@@ -722,7 +727,7 @@
             }
 
             const printWin = window.open('', '_blank', 'width=420,height=700');
-            if (!printWin || printWin.closed || typeof printWin.closed == 'undefined') {
+            if (!printWin) {
                 alert('Pop-up diblokir. Izinkan pop-up untuk situs ini agar fitur Print berfungsi.');
                 return;
             }
@@ -763,6 +768,29 @@
                 return;
             }
 
+            // Primary: jsPDF text-based
+            try {
+                const jspdfLib = window.jspdf || window.jsPDF;
+                if (jspdfLib) {
+                    const { jsPDF } = jspdfLib.jsPDF ? jspdfLib : { jsPDF: jspdfLib };
+                    if (jsPDF && reprintData) {
+                        const t = reprintData;
+                        const doc = buildTextReceiptFromData(t, w);
+                        if (doc) {
+                            const blob = doc.output('blob');
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url; a.download = `REPRINT-${window._reReceiptNo || 'receipt'}.pdf`;
+                            a.style.display = 'none'; document.body.appendChild(a);
+                            a.click();
+                            setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+                            return;
+                        }
+                    }
+                }
+            } catch (_) {}
+
+            // Fallback: html2pdf
             try {
                 const opt = {
                     margin: 0,
@@ -773,8 +801,53 @@
                 };
                 html2pdf().set(opt).from(element).save();
             } catch (e) {
-                alert('Gagal generate PDF: ' + e.message + '\n\nCoba gunakan tombol Print lalu Save as PDF dari browser.');
+                alert('Gagal generate PDF. Coba gunakan tombol Print.');
             }
+        }
+
+        function buildTextReceiptFromData(t, w) {
+            if (!t) return null;
+            try {
+                const jspdfLib = window.jspdf || window.jsPDF;
+                if (!jspdfLib) return null;
+                const { jsPDF } = jspdfLib.jsPDF ? jspdfLib : { jsPDF: jspdfLib };
+                if (!jsPDF) return null;
+                const ts = (t.createdAt && typeof t.createdAt === 'number') ? new Date(t.createdAt) :
+                           (t.timestamp && t.timestamp?.toDate) ? new Date(t.timestamp.toDate()) : new Date();
+                const dd = String(ts.getDate()).padStart(2, '0');
+                const MM = String(ts.getMonth() + 1).padStart(2, '0');
+                const yy = String(ts.getFullYear()).slice(-2);
+                const timeStr = ts.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                const dateStr = `${dd}/${MM}/${yy}`;
+                const seq = String(t.receiptSeq || 0).padStart(6, '0');
+                const receiptNo = `POS-${dd}${MM}${yy}-${seq}`;
+                const methodLabel = t.method === 'cash' ? 'Cash' : t.method === 'qris' ? 'QRIS' : 'Transfer';
+                const itemCount = (t.items || []).length;
+                const estimatedHeight = 60 + (itemCount * 10) + 30;
+                const doc = new jsPDF({ unit: 'mm', format: [w, Math.max(estimatedHeight, 100)], orientation: 'portrait' });
+                let y = 5, lh = 4, mg = 3, cx = w / 2;
+                doc.setFont('Courier', 'normal');
+                doc.setFontSize(10);
+                doc.text(CONFIG.storeName || 'Receipt', cx, y, { align: 'center' }); y += lh;
+                doc.setFontSize(7);
+                doc.text(`REPRINT #${receiptNo}  ${dateStr} ${timeStr}`, cx, y, { align: 'center' }); y += lh;
+                doc.text(`Customer: ${t.customerName || 'Walk-in'}`, cx, y, { align: 'center' }); y += lh;
+                doc.text('-'.repeat(28), mg, y); y += lh + 1;
+                (t.items || []).forEach(item => {
+                    doc.text(`${item.name || ''}`, mg, y); y += lh;
+                    const sub = `Rp${(item.subtotal || item.price * item.qty || 0).toLocaleString('id-ID')}`;
+                    doc.text(`  ${item.qty}x @ Rp${(item.price || 0).toLocaleString('id-ID')}  = ${sub}`, mg, y); y += lh;
+                });
+                doc.text('-'.repeat(28), mg, y); y += lh + 1;
+                doc.setFontSize(9);
+                doc.text(`TOTAL: Rp${(t.total || 0).toLocaleString('id-ID')}`, mg, y); y += lh;
+                doc.setFontSize(7);
+                doc.text(`Metode: ${methodLabel}`, mg, y); y += lh;
+                y += 2;
+                doc.setFontSize(8);
+                doc.text('Terima Kasih (REPRINT)', cx, y, { align: 'center' });
+                return doc;
+            } catch (_) { return null; }
         }
     </script>
 </body>

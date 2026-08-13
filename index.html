@@ -7,9 +7,9 @@
     <script src="config.js"></script>
     <script src="pwa.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha384-t1nt8BQoYMLFN5p42tRAtuAAFQaCQODekUVeKKZrEnEyp4H2R0RHFz0KWpmj7i8g" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha384-Yv5O+t3uE3hunW8uyrbpPW3iw6/5/Y7HitWJBLgqfMoA36NogMmy+8wWZMpn3HWc" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous"></script>
 </head>
 <body class="bg-zinc-950 text-zinc-200">
     <div class="min-h-screen">
@@ -335,6 +335,11 @@
         let editingProductId = null;
         let selectedPaymentMethod = 'cash';
         let todayStats = { transactions: 0, revenue: 0 };
+
+        // Escape HTML — pencegahan stored XSS dari data Firestore
+        function esc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
 
         // Auth check
         auth.onAuthStateChanged(user => {
@@ -692,7 +697,7 @@
                     method: selectedPaymentMethod,
                     customerName: document.getElementById('customer-name').value || 'Walk-in',
                     customerWA: document.getElementById('customer-wa').value || '',
-                    kasirName: document.getElementById('kasir-name').value || currentUser?.email || 'admin',
+                    kasirName: currentUser?.email || 'admin',
                     timestamp: now,
                     receiptSeq,
                     createdAt: Date.now(),
@@ -714,12 +719,13 @@
                     }
                 }
 
-                // Update stock
+                // Update stock (batch write for atomicity)
+                const batch = db.batch();
                 for (const item of cart) {
-                    await db.collection('demo-products').doc(item.id).update({
-                        stock: firebase.firestore.FieldValue.increment(-item.qty)
-                    });
+                    const ref = db.collection('demo-products').doc(item.id);
+                    batch.update(ref, { stock: firebase.firestore.FieldValue.increment(-item.qty) });
                 }
+                await batch.commit();
 
                 hideConfirmModal();
                 showReceipt(transaction);
@@ -765,8 +771,8 @@
 
             // Header
             html += `<div style="margin-bottom:6px;">`;
-            html += `<div style="font-size:16px;font-weight:bold;letter-spacing:1px;">${CONFIG.storeName.toUpperCase()}</div>`;
-            html += `<div style="font-size:10px;font-style:italic;margin:2px 0;">"${CONFIG.storeJargon}"</div>`;
+            html += `<div style="font-size:16px;font-weight:bold;letter-spacing:1px;">${esc(CONFIG.storeName.toUpperCase())}</div>`;
+            html += `<div style="font-size:10px;font-style:italic;margin:2px 0;">"${esc(CONFIG.storeJargon)}"</div>`;
             html += `<div style="font-size:10px;">${dateStr} ${timeStr}</div>`;
             html += `<div style="font-size:10px;margin-top:2px;border:1px solid #ccc;display:inline-block;padding:0 6px;">${receiptNo}</div>`;
             html += `</div>`;
@@ -778,11 +784,11 @@
             const kasirName = transaction.kasirName || transaction.createdBy || 'admin';
             html += `<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:2px;">`;
             html += `<span>Customer</span>`;
-            html += `<span>${custName}</span>`;
+            html += `<span>${esc(custName)}</span>`;
             html += `</div>`;
             html += `<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:1px;">`;
             html += `<span>Kasir</span>`;
-            html += `<span>${kasirName}</span>`;
+            html += `<span>${esc(kasirName)}</span>`;
             html += `</div>`;
             
             // Item header
@@ -793,11 +799,11 @@
             
             transaction.items.forEach(item => {
                 html += `<div style="display:flex;justify-content:space-between;font-size:11px;">`;
-                html += `<span>${item.name} x${item.qty}</span>`;
+                html += `<span>${esc(item.name)} x${item.qty}</span>`;
                 html += `<span>${item.subtotal.toLocaleString('id-ID')}</span>`;
                 html += `</div>`;
                 if (item.imei) {
-                    html += `<div style="font-size:9px;color:#666;padding-left:8px;">IMEI: ${item.imei}</div>`;
+                    html += `<div style="font-size:9px;color:#666;padding-left:8px;">IMEI: ${esc(item.imei)}</div>`;
                 }
             });
             
@@ -898,19 +904,24 @@
                 jsPDF: { unit: 'mm', format: [w, 200] }
             };
 
-            // Coba html2pdf capture dulu. Kalau blob < 1KB (blank), fallback ke text-based PDF.
-            html2pdf().set(opt).from(element).outputPdf('blob').then(blob => {
-                if (blob.size < 1000 && t) {
-                    // html2pdf blank — fallback ke text PDF biar tetep kebaca
-                    const doc = buildTextReceipt(t, w);
-                    if (doc) doc.save(`${window._lastReceiptNo || 'receipt'}.pdf`);
-                    else { html2pdf().set(opt).from(element).save(); } // fallback safenet
-                } else {
-                    html2pdf().set(opt).from(element).save();
-                }
-            }).catch(() => {
-                // html2pdf error — coba text fallback
-                if (t) { const doc = buildTextReceipt(t, w); if (doc) doc.save(`${window._lastReceiptNo || 'receipt'}.pdf`); }
+            // Primary: jsPDF text-based (works on all devices, no canvas dependency)
+            const doc = buildTextReceipt(t, w);
+            if (doc) {
+                try {
+                    const blob = doc.output('blob');
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = `${window._lastReceiptNo || 'receipt'}.pdf`;
+                    a.style.display = 'none'; document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+                } catch (_) { doc.save(`${window._lastReceiptNo || 'receipt'}.pdf`); }
+                return;
+            }
+            // Fallback: html2pdf (desktop only, may fail in PWA)
+            if (typeof html2pdf === 'undefined') { alert('PDF library belum ready'); return; }
+            html2pdf().set(opt).from(element).save().catch(() => {
+                alert('Gagal download PDF. Coba gunakan Print.');
             });
         }
 
@@ -918,8 +929,10 @@
         function buildTextReceipt(t, w) {
             if (!t) return null;
             try {
-                if (typeof window.jspdf === 'undefined') return null;
-                const { jsPDF } = window.jspdf;
+                const jspdfLib = window.jspdf || window.jsPDF;
+                if (!jspdfLib) return null;
+                const { jsPDF } = jspdfLib.jsPDF ? jspdfLib : { jsPDF: jspdfLib };
+                if (!jsPDF) return null;
                 const doc = new jsPDF({ unit: 'mm', format: [w, 150], orientation: 'portrait' });
 
                 const ts = (t.createdAt && typeof t.createdAt === 'number') ? new Date(t.createdAt) :
@@ -999,7 +1012,7 @@
             if (t.method === 'cash') {
                 cashLines = `Tunai: Rp${t.cash.toLocaleString('id-ID')}\nKembali: Rp${t.change.toLocaleString('id-ID')}\n`;
             }
-            const msg = `*${CONFIG.storeName.toUpperCase()}*\n_"${CONFIG.storeJargon}"_\n\n${dateStr} ${timeStr}\nNo: ${receiptNo}\n${'─'.repeat(20)}\nCustomer: ${t.customerName || 'Walk-in'}\nKasir: ${t.kasirName || t.createdBy || 'admin'}\n${'─'.repeat(20)}\n${itemLines}${'─'.repeat(20)}\n*TOTAL: Rp${t.total.toLocaleString('id-ID')}*\nMetode: ${methodLabel}\n${cashLines}${'─'.repeat(20)}\nTerima Kasih 🙏\n\n${CONFIG.storeAddress}\n${CONFIG.storeHours}\nWA: ${CONFIG.storeWA}\nIG: ${CONFIG.storeIG}\n${CONFIG.storeWebsite}`;
+            const msg = `*${esc(CONFIG.storeName.toUpperCase())}*\n_"${esc(CONFIG.storeJargon)}"_\n\n${dateStr} ${timeStr}\nNo: ${receiptNo}\n${'─'.repeat(20)}\nCustomer: ${esc(t.customerName || 'Walk-in')}\nKasir: ${esc(t.kasirName || t.createdBy || 'admin')}\n${'─'.repeat(20)}\n${itemLines}${'─'.repeat(20)}\n*TOTAL: Rp${t.total.toLocaleString('id-ID')}*\nMetode: ${methodLabel}\n${cashLines}${'─'.repeat(20)}\nTerima Kasih 🙏\n\n${esc(CONFIG.storeAddress)}\n${esc(CONFIG.storeHours)}\nWA: ${esc(CONFIG.storeWA)}\nIG: ${esc(CONFIG.storeIG)}\n${esc(CONFIG.storeWebsite)}`;
             window.open(`https://wa.me/${wa}?text=${encodeURIComponent(msg)}`, '_blank');
         }
 
@@ -1049,7 +1062,7 @@
                     const div = document.createElement('div');
                     div.className = 'flex justify-between items-center';
                     div.innerHTML = `
-                        <span>${p.name}</span>
+                        <span>${esc(p.name)}</span>
                         <span class="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded">${p.stock}</span>
                     `;
                     listEl.appendChild(div);
