@@ -341,15 +341,23 @@
             return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
         }
 
-        // Auth check
+        // Auth check — debounce for iOS Safari PWA (IndexedDB init race)
+        let _authReady = false;
+        let _authTimer = null;
         auth.onAuthStateChanged(user => {
-            if (!user) {
-                window.location.href = './login';
-            } else {
+            if (_authTimer) clearTimeout(_authTimer);
+            if (user) {
+                _authReady = true;
                 currentUser = user;
                 document.getElementById('admin-name').textContent = user.email.split('@')[0];
                 loadProducts();
                 loadTodayStats();
+            } else if (_authReady) {
+                window.location.href = 'login.html';
+            } else {
+                _authTimer = setTimeout(() => {
+                    if (!currentUser) window.location.href = 'login.html';
+                }, 3000);
             }
         });
 
