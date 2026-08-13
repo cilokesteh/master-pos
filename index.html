@@ -1013,7 +1013,14 @@
                 cashLines = `Tunai: Rp${t.cash.toLocaleString('id-ID')}\nKembali: Rp${t.change.toLocaleString('id-ID')}\n`;
             }
             const msg = `*${esc(CONFIG.storeName.toUpperCase())}*\n_"${esc(CONFIG.storeJargon)}"_\n\n${dateStr} ${timeStr}\nNo: ${receiptNo}\n${'─'.repeat(20)}\nCustomer: ${esc(t.customerName || 'Walk-in')}\nKasir: ${esc(t.kasirName || t.createdBy || 'admin')}\n${'─'.repeat(20)}\n${itemLines}${'─'.repeat(20)}\n*TOTAL: Rp${t.total.toLocaleString('id-ID')}*\nMetode: ${methodLabel}\n${cashLines}${'─'.repeat(20)}\nTerima Kasih 🙏\n\n${esc(CONFIG.storeAddress)}\n${esc(CONFIG.storeHours)}\nWA: ${esc(CONFIG.storeWA)}\nIG: ${esc(CONFIG.storeIG)}\n${esc(CONFIG.storeWebsite)}`;
-            window.open(`https://wa.me/${wa}?text=${encodeURIComponent(msg)}`, '_blank');
+            const url = `https://wa.me/${wa}?text=${encodeURIComponent(msg)}`;
+            const a = document.createElement('a');
+            a.href = url;
+            a.target = '_blank';
+            a.rel = 'noopener';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         }
 
         async function loadTodayStats() {
