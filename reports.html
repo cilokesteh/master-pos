@@ -678,20 +678,13 @@
                     html += `<span>${(d.change || 0).toLocaleString('id-ID')}</span>`;
                     html += `</div>`;
                 } else if (d.method === 'split' && d.split) {
-                    if (d.split.cash > 0) {
-                        html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>Cash</span><span>${d.split.cash.toLocaleString('id-ID')}</span></div>`;
-                    }
-                    if (d.split.qris > 0) {
-                        html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>QRIS</span><span>${d.split.qris.toLocaleString('id-ID')}</span></div>`;
-                    }
-                    if (d.split.transfer > 0) {
-                        html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>Transfer</span><span>${d.split.transfer.toLocaleString('id-ID')}</span></div>`;
-                    }
+                    html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>Cash</span><span>${(d.split.cash || 0).toLocaleString('id-ID')}</span></div>`;
+                    html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>Kartu</span><span>${(d.split.card || d.split.transfer || 0).toLocaleString('id-ID')}</span></div>`;
                     if (d.split.cardType) {
-                        html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>Kartu</span><span>${esc(d.split.cardType.toUpperCase())}</span></div>`;
+                        html += `<div style="display:flex;justify-content:space-between;font-size:10px;"><span>Tipe Kartu</span><span>${esc(d.split.cardType.toUpperCase())}</span></div>`;
                     }
                     if (d.split.cardNumber) {
-                        html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>No Kartu</span><span>${esc(d.split.cardNumber)}</span></div>`;
+                        html += `<div style="display:flex;justify-content:space-between;font-size:10px;"><span>No Kartu</span><span>${esc(d.split.cardNumber)}</span></div>`;
                     }
                 }
                 // Footer
@@ -823,7 +816,7 @@
                 const dateStr = dd + '/' + MM + '/' + yy;
                 const seq = String(t.receiptSeq || 0).padStart(6, '0');
                 const receiptNo = 'POS-' + dd + MM + yy + '-' + seq;
-                const methodLabel = t.method === 'cash' ? 'CASH' : t.method === 'qris' ? 'QRIS' : 'TRANSFER';
+                const methodLabel = t.method === 'cash' ? 'CASH' : t.method === 'qris' ? 'QRIS' : t.method === 'split' ? 'SPLIT' : 'TRANSFER';
                 const itemCount = (t.items || []).length;
                 const estimatedHeight = 70 + (itemCount * 14) + 60;
                 const doc = new jsPDF({ unit: 'mm', format: [w, Math.max(estimatedHeight, 100)], orientation: 'portrait' });
@@ -894,6 +887,15 @@
                     doc.text('Rp' + (t.cash || 0).toLocaleString('id-ID'), right, y, { align: 'right' }); y += lh;
                     doc.text('Kembali', mg, y);
                     doc.text('Rp' + (t.change || 0).toLocaleString('id-ID'), right, y, { align: 'right' }); y += lh;
+                } else if (t.method === 'split' && t.split) {
+                    doc.text('Cash', mg, y);
+                    doc.text('Rp' + (t.split.cash || 0).toLocaleString('id-ID'), right, y, { align: 'right' }); y += lh;
+                    doc.text('Kartu', mg, y);
+                    doc.text('Rp' + (t.split.card || 0).toLocaleString('id-ID'), right, y, { align: 'right' }); y += lh;
+                    if (t.split.cardType) {
+                        doc.text('Tipe Kartu', mg, y);
+                        doc.text(String(t.split.cardType).toUpperCase(), right, y, { align: 'right' }); y += lh;
+                    }
                 }
                 drawLine(y, false); y += 5.5;
                 doc.setFont('Helvetica', 'bold');

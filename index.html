@@ -546,23 +546,34 @@
             document.getElementById('product-modal').classList.add('hidden');
         }
 
-        function saveProduct() {
+        async function saveProduct() {
+            const saveBtn = document.querySelector('#product-modal button[onclick="saveProduct()"]');
+            if (saveBtn?.disabled) return;
             const name = document.getElementById('product-name').value.trim();
             const price = parseInt(document.getElementById('product-price').value);
             const costPrice = parseInt(document.getElementById('product-cost').value) || 0;
             const stock = parseInt(document.getElementById('product-stock').value);
             const category = document.getElementById('product-category').value;
 
-            if (!name || isNaN(price) || isNaN(stock)) return alert('Lengkapi data');
+            if (!name || !Number.isInteger(price) || price < 0 || !Number.isInteger(costPrice) || costPrice < 0 || !Number.isInteger(stock) || stock < 0) {
+                alert('Nama wajib diisi; harga, modal, dan stok harus angka 0 atau lebih.');
+                return;
+            }
 
             const data = { name, price, costPrice, stock, category };
-
-            if (editingProductId) {
-                db.collection('demo-products').doc(editingProductId).update(data);
-            } else {
-                db.collection('demo-products').add(data);
+            if (saveBtn) saveBtn.disabled = true;
+            try {
+                if (editingProductId) {
+                    await db.collection('demo-products').doc(editingProductId).update(data);
+                } else {
+                    await db.collection('demo-products').add(data);
+                }
+                hideProductModal();
+            } catch (err) {
+                alert('Gagal menyimpan produk: ' + err.message);
+            } finally {
+                if (saveBtn) saveBtn.disabled = false;
             }
-            hideProductModal();
         }
 
         async function deleteProduct(id) {
@@ -637,6 +648,24 @@
             }
         }
 
+        function readNonNegativeAmount(id) {
+            const raw = document.getElementById(id).value.trim();
+            if (raw === '') return 0;
+            const amount = Number(raw);
+            return Number.isInteger(amount) && amount >= 0 ? amount : NaN;
+        }
+
+        function calcSplit() {
+            const total = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+            const cash = readNonNegativeAmount('split-cash');
+            const card = readNonNegativeAmount('split-card');
+            const invalid = !Number.isFinite(cash) || !Number.isFinite(card);
+            const remaining = invalid ? total : total - cash - card;
+            const el = document.getElementById('split-remaining');
+            el.textContent = invalid ? 'Nominal tidak valid' : `Rp ${Math.max(0, remaining).toLocaleString('id-ID')}`;
+            el.className = `font-bold ${invalid || remaining < 0 ? 'text-red-400' : remaining === 0 ? 'text-emerald-400' : 'text-amber-400'}`;
+        }
+
         function confirmPayment() {
             if (cart.length === 0) return;
 
@@ -651,11 +680,23 @@
                 }
             }
 
+            if (selectedPaymentMethod === 'split') {
+                const cash = readNonNegativeAmount('split-cash');
+                const card = readNonNegativeAmount('split-card');
+                if (!Number.isFinite(cash) || !Number.isFinite(card) || cash + card !== total) {
+                    alert(`Nominal split harus berupa angka 0 atau lebih dan sama dengan total: Rp ${total.toLocaleString('id-ID')}`);
+                    return;
+                }
+            }
+
             // Show confirm modal
             document.getElementById('confirm-total').textContent = `Rp ${total.toLocaleString('id-ID')}`;
-            document.getElementById('confirm-method').textContent = 
-                selectedPaymentMethod === 'cash' ? 'Cash' : 
-                selectedPaymentMethod === 'qris' ? 'QRIS' : 'Transfer';
+            document.getElementById('confirm-method').textContent =
+                selectedPaymentMethod === 'cash' ? 'Cash' :
+                selectedPaymentMethod === 'qris' ? 'QRIS' :
+                selectedPaymentMethod === 'split' ? 'Split' : 'Transfer';
+            const finishBtn = document.querySelector('#confirm-modal button[onclick="finishPayment()"]');
+            if (finishBtn) finishBtn.disabled = false;
             
             const changeText = document.getElementById('confirm-change-text');
             if (selectedPaymentMethod === 'cash') {
@@ -676,13 +717,28 @@
         }
 
         async function finishPayment() {
+            const finishBtn = document.querySelector('#confirm-modal button[onclick="finishPayment()"]');
+            if (finishBtn?.disabled) return;
+            if (finishBtn) finishBtn.disabled = true;
             const total = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
             let cash = 0;
             let change = 0;
+            let split = null;
 
             if (selectedPaymentMethod === 'cash') {
                 cash = parseInt(document.getElementById('cash-amount').value) || 0;
                 change = cash - total;
+            } else if (selectedPaymentMethod === 'split') {
+                const card = readNonNegativeAmount('split-card');
+                split = {
+                    cash: readNonNegativeAmount('split-cash'),
+                    card,
+                    // Compatibility keys keep reports/reprints readable across POS versions.
+                    qris: 0,
+                    transfer: card,
+                    cardType: document.getElementById('card-type').value,
+                    cardNumber: document.getElementById('card-number').value.trim()
+                };
             }
 
             try {
@@ -712,6 +768,7 @@
                     cash,
                     change,
                     method: selectedPaymentMethod,
+                    split,
                     customerName: document.getElementById('customer-name').value || 'Walk-in',
                     customerWA: document.getElementById('customer-wa').value || '',
                     kasirName: currentUser?.email || 'admin',
@@ -721,37 +778,42 @@
                     createdBy: currentUser.email
                 };
 
-                await db.collection('demo-transactions').add(transaction);
+                // Atomic checkout: stock validation, stock decrement, and sale creation
+                // succeed or fail together. This prevents phantom sales and overselling.
+                const saleRef = db.collection('demo-transactions').doc();
+                await db.runTransaction(async tx => {
+                    const stockRows = [];
+                    for (const item of cart) {
+                        const ref = db.collection('demo-products').doc(item.id);
+                        const snap = await tx.get(ref);
+                        if (!snap.exists) throw new Error('Produk "' + item.name + '" tidak ditemukan');
+                        const available = Number(snap.data().stock) || 0;
+                        if (available < item.qty) {
+                            throw new Error('Stok "' + item.name + '" tidak mencukupi. Sisa: ' + available);
+                        }
+                        stockRows.push({ ref, nextStock: available - item.qty });
+                    }
+                    stockRows.forEach(row => tx.update(row.ref, { stock: row.nextStock }));
+                    tx.set(saleRef, transaction);
+                });
 
-                // Save / update customer in customer database
+                // Customer CRM update is secondary; a failure here must not roll back
+                // an already successful sale/stock commit.
                 const waInput = document.getElementById('customer-wa').value.trim();
                 const nameInput = document.getElementById('customer-name').value.trim();
                 if (waInput) {
-                    const custSnap = await db.collection('demo-customers').where('wa', '==', waInput).limit(1).get();
-                    if (custSnap.empty) {
-                        await db.collection('demo-customers').add({ name: nameInput || 'Walk-in', wa: waInput, totalSpent: total, visitCount: 1, createdAt: Date.now() });
-                    } else {
-                        const custDoc = custSnap.docs[0];
-                        await custDoc.ref.update({ name: nameInput || custDoc.data().name, totalSpent: firebase.firestore.FieldValue.increment(total), visitCount: firebase.firestore.FieldValue.increment(1), lastVisit: Date.now() });
+                    try {
+                        const custSnap = await db.collection('demo-customers').where('wa', '==', waInput).limit(1).get();
+                        if (custSnap.empty) {
+                            await db.collection('demo-customers').add({ name: nameInput || 'Walk-in', wa: waInput, totalSpent: total, visitCount: 1, createdAt: Date.now() });
+                        } else {
+                            const custDoc = custSnap.docs[0];
+                            await custDoc.ref.update({ name: nameInput || custDoc.data().name, totalSpent: firebase.firestore.FieldValue.increment(total), visitCount: firebase.firestore.FieldValue.increment(1), lastVisit: Date.now() });
+                        }
+                    } catch (crmErr) {
+                        console.warn('Customer CRM update failed:', crmErr);
                     }
                 }
-
-                // Re-check stock against DB before committing (prevents negative stock on stale data)
-                for (const item of cart) {
-                    const snap = await db.collection('demo-products').doc(item.id).get();
-                    if (snap.exists && (snap.data().stock || 0) < item.qty) {
-                        alert('Stok "' + item.name + '" tidak mencukupi. Sisa: ' + (snap.data().stock || 0));
-                        return;
-                    }
-                }
-
-                // Update stock (batch write for atomicity)
-                const batch = db.batch();
-                for (const item of cart) {
-                    const ref = db.collection('demo-products').doc(item.id);
-                    batch.update(ref, { stock: firebase.firestore.FieldValue.increment(-item.qty) });
-                }
-                await batch.commit();
 
                 hideConfirmModal();
                 showReceipt(transaction);
@@ -759,6 +821,8 @@
                 renderCart();
             } catch (err) {
                 alert('Gagal menyimpan transaksi: ' + err.message);
+            } finally {
+                if (finishBtn) finishBtn.disabled = false;
             }
         }
 
@@ -766,8 +830,9 @@
             const modal = document.getElementById('receipt-modal');
             const content = document.getElementById('receipt-content');
             content.style.width = `${CONFIG.receipt.width}mm`;
-            const methodLabel = transaction.method === 'cash' ? 'Cash' : 
-                              transaction.method === 'qris' ? 'QRIS' : 'Transfer';
+            const methodLabel = transaction.method === 'cash' ? 'Cash' :
+                              transaction.method === 'qris' ? 'QRIS' :
+                              transaction.method === 'split' ? 'Split Cash + Kartu' : 'Transfer';
             
             // Generate receipt number: POS-DDMMYY-0000001
             let ts;
@@ -845,14 +910,19 @@
             html += `</div>`;
             
             if (transaction.method === 'cash') {
-                html += `<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:2px;">`;
+                html += `<div style="display:flex;justify-content:space-between;font-size:11px;">`;
                 html += `<span>Tunai</span>`;
                 html += `<span>${transaction.cash.toLocaleString('id-ID')}</span>`;
                 html += `</div>`;
-                html += `<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:1px;">`;
+                html += `<div style="display:flex;justify-content:space-between;font-size:11px;">`;
                 html += `<span>Kembali</span>`;
                 html += `<span>${transaction.change.toLocaleString('id-ID')}</span>`;
                 html += `</div>`;
+            } else if (transaction.method === 'split' && transaction.split) {
+                html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>Cash</span><span>${(transaction.split.cash || 0).toLocaleString('id-ID')}</span></div>`;
+                html += `<div style="display:flex;justify-content:space-between;font-size:11px;"><span>Kartu</span><span>${(transaction.split.card || 0).toLocaleString('id-ID')}</span></div>`;
+                if (transaction.split.cardType) html += `<div style="display:flex;justify-content:space-between;font-size:10px;"><span>Tipe Kartu</span><span>${esc(transaction.split.cardType.toUpperCase())}</span></div>`;
+                if (transaction.split.cardNumber) html += `<div style="display:flex;justify-content:space-between;font-size:10px;"><span>No Kartu</span><span>${esc(transaction.split.cardNumber)}</span></div>`;
             }
             
             // Footer
@@ -970,7 +1040,7 @@
                 const dateStr = `${dd}/${MM}/${yy}`;
                 const seq = String(t.receiptSeq || 1).padStart(6, '0');
                 const receiptNo = `POS-${dd}${MM}${yy}-${seq}`;
-                const methodLabel = t.method === 'cash' ? 'CASH' : t.method === 'qris' ? 'QRIS' : 'TRANSFER';
+                const methodLabel = t.method === 'cash' ? 'CASH' : t.method === 'qris' ? 'QRIS' : t.method === 'split' ? 'SPLIT' : 'TRANSFER';
 
                 const itemCount = (t.items || []).length;
                 const estimatedHeight = 70 + (itemCount * 14) + 60;
@@ -1067,6 +1137,15 @@
                     doc.text('Rp' + (t.cash || 0).toLocaleString('id-ID'), right, y, { align: 'right' }); y += lh;
                     doc.text('Kembali', mg, y);
                     doc.text('Rp' + (t.change || 0).toLocaleString('id-ID'), right, y, { align: 'right' }); y += lh;
+                } else if (t.method === 'split' && t.split) {
+                    doc.text('Cash', mg, y);
+                    doc.text('Rp' + (t.split.cash || 0).toLocaleString('id-ID'), right, y, { align: 'right' }); y += lh;
+                    doc.text('Kartu', mg, y);
+                    doc.text('Rp' + (t.split.card || 0).toLocaleString('id-ID'), right, y, { align: 'right' }); y += lh;
+                    if (t.split.cardType) {
+                        doc.text('Tipe Kartu', mg, y);
+                        doc.text(String(t.split.cardType).toUpperCase(), right, y, { align: 'right' }); y += lh;
+                    }
                 }
 
                 // ── THIN LINE ──
@@ -1114,17 +1193,21 @@
             const dateStr = `${dd}/${MM}/${yy}`;
             const seq = String(t.receiptSeq || 1).padStart(6, '0');
             const receiptNo = `POS-${dd}${MM}${yy}-${seq}`;
-            const methodLabel = t.method === 'cash' ? 'Cash' : t.method === 'qris' ? 'QRIS' : 'Transfer';
+            const methodLabel = t.method === 'cash' ? 'Cash' : t.method === 'qris' ? 'QRIS' : t.method === 'split' ? 'Split' : 'Transfer';
             let itemLines = '';
             t.items.forEach(item => {
-                itemLines += `${item.name} x${item.qty} = Rp${item.subtotal.toLocaleString('id-ID')}\n`;
+                const subtotal = Number(item.subtotal) || ((Number(item.price) || 0) * (Number(item.qty) || 0));
+                itemLines += `${item.name || 'Item'} x${item.qty || 0} = Rp${subtotal.toLocaleString('id-ID')}\n`;
                 if (item.imei) itemLines += `  IMEI: ${item.imei}\n`;
             });
             let cashLines = '';
             if (t.method === 'cash') {
-                cashLines = `Tunai: Rp${t.cash.toLocaleString('id-ID')}\nKembali: Rp${t.change.toLocaleString('id-ID')}\n`;
+                cashLines = `Tunai: Rp${(t.cash || 0).toLocaleString('id-ID')}\nKembali: Rp${(t.change || 0).toLocaleString('id-ID')}\n`;
+            } else if (t.method === 'split' && t.split) {
+                cashLines = `Cash: Rp${(t.split.cash || 0).toLocaleString('id-ID')}\nKartu: Rp${(t.split.card || 0).toLocaleString('id-ID')}\n`;
             }
-            const msg = `*${esc(CONFIG.storeName.toUpperCase())}*\n_"${esc(CONFIG.storeJargon)}"_\n\n${dateStr} ${timeStr}\nNo: ${receiptNo}\n${'─'.repeat(20)}\nCustomer: ${esc(t.customerName || 'Walk-in')}\nKasir: ${esc(t.kasirName || t.createdBy || 'admin')}\n${'─'.repeat(20)}\n${itemLines}${'─'.repeat(20)}\n*TOTAL: Rp${t.total.toLocaleString('id-ID')}*\nMetode: ${methodLabel}\n${cashLines}${'─'.repeat(20)}\nTerima Kasih 🙏\n\n${esc(CONFIG.storeAddress)}\n${esc(CONFIG.storeHours)}\nWA: ${esc(CONFIG.storeWA)}\nIG: ${esc(CONFIG.storeIG)}\n${esc(CONFIG.storeWebsite)}`;
+            // Plain-text WhatsApp payload: do not HTML-escape (& must stay &, not &amp;).
+            const msg = `*${CONFIG.storeName.toUpperCase()}*\n_"${CONFIG.storeJargon}"_\n\n${dateStr} ${timeStr}\nNo: ${receiptNo}\n${'─'.repeat(20)}\nCustomer: ${t.customerName || 'Walk-in'}\nKasir: ${t.kasirName || t.createdBy || 'admin'}\n${'─'.repeat(20)}\n${itemLines}${'─'.repeat(20)}\n*TOTAL: Rp${t.total.toLocaleString('id-ID')}*\nMetode: ${methodLabel}\n${cashLines}${'─'.repeat(20)}\nTerima Kasih\n\n${CONFIG.storeAddress}\n${CONFIG.storeHours}\nWA: ${CONFIG.storeWA}\nIG: ${CONFIG.storeIG}\n${CONFIG.storeWebsite}`;
             const url = `https://wa.me/${wa}?text=${encodeURIComponent(msg)}`;
             const a = document.createElement('a');
             a.href = url;
